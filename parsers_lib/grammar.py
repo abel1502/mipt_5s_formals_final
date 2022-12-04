@@ -1,16 +1,24 @@
 from __future__ import annotations
 import typing
 import dataclasses
+import abc
+from functools import cached_property
+
+from .utils import *
 
 
-@dataclasses.dataclass(frozen=True)
-class BaseSymbol:
-    pass
+class BaseSymbol(abc.ABC):
+    @abc.abstractmethod
+    def isTerminal() -> bool:
+        ...
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
 class Nonterminal(BaseSymbol):
     name: str
+    
+    def isTerminal(self) -> bool:
+        return False
     
     def __repr__(self):
         return self.name
@@ -19,6 +27,9 @@ class Nonterminal(BaseSymbol):
 @dataclasses.dataclass(frozen=True, repr=False)
 class Terminal(BaseSymbol):
     value: str
+    
+    def isTerminal(self) -> bool:
+        return True
     
     def __repr__(self):
         return repr(self.value)
@@ -37,23 +48,75 @@ class Rule:
 
 
 class Grammar:
-    _rules: typing.List[Rule]
+    _rules: typing.Final[typing.Set[Rule]]
+    _nonterminals: typing.Final[typing.Dict[str, Nonterminal]]
+    _start: typing.Final[str | Nonterminal]
     
-    def __init__(self, rules: typing.Iterable[Rule] | None):
-        if rules is None:
-            rules = []
+    def __init__(self, rules: typing.Iterable[Rule] = (), start: str | Nonterminal = "S"):
+        self._rules = set(rules)
+        self._nonterminals = {rule.lhs.name: rule.lhs for rule in self._rules}
         
-        self._rules = list(rules)
+        self._start = start
     
-    @property
+    @cached_property
     def rules(self) -> typing.Iterable[Rule]:
         return self._rules
+    
+    @cached_property
+    def nonterminals(self) -> typing.Mapping[str, Nonterminal]:
+        return self._nonterminals
+    
+    @cached_property
+    def start(self) -> Nonterminal:
+        return self.resolve_nonterminal(self._start)
+    
+    @cached_property
+    def new_start(self) -> Nonterminal:
+        value = Nonterminal(f"_new_start")
+        
+        assert not self.has_nonterminal(value)
+        
+        self.add_rule(Rule(value, [self.start]))
+    
+    def has_nonterminal(self, nonterm: str | Nonterminal) -> bool:
+        if isinstance(nonterm, Nonterminal):
+            return nonterm in self.nonterminals.values()
+        
+        return nonterm in self.nonterminals.keys()
+    
+    def resolve_nonterminal(self, nonterm: str | Nonterminal) -> Nonterminal:
+        if not self.has_nonterminal(nonterm):
+            raise KeyError(f"Nonterminal {nonterm} not found in grammar")
+        
+        if isinstance(nonterm, str):
+            nonterm: Nonterminal = self.nonterminals[nonterm]
+        
+        return nonterm
 
     def add_rule(self, rule: Rule):
-        self._rules.append(rule)
+        self._rules.add(rule)
+    
+    def create_rule(self, lhs: str | Nonterminal, rhs: typing.Iterable[str | Nonterminal]) -> Rule:
+        lhs: Nonterminal = self.resolve_nonterminal(lhs)
+        rhs = list(map(self.resolve_nonterminal, rhs))
+        
+        return Rule(lhs, rhs)
     
     def get_rules_by_lhs(self, lhs: Nonterminal) -> typing.Iterable[Rule]:
         return filter(lambda rule: rule.lhs == lhs, self._rules)
+    
+    def prune(self) -> None:
+        self._prune_unused_nonterminals()
+    
+    def _prune_unused_nonterminals(self) -> None:
+        # Trigger it here just to make sure it's already created
+        self.new_start
+        
+        used_nonterminals = set(rule.lhs for rule in self._rules)
+        used_nonterminals.add(self.new_start)  # It's considered used in any case
+        # used_nonterminals.add(self.start)  # Unnecessary, since it's always used by the new start rule
+        
+        self._nonterminals -= used_nonterminals
     
     def __repr__(self):
         return f"Grammar({', '.join(map(repr, self._rules))})"
