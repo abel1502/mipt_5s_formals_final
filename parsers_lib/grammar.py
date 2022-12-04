@@ -59,7 +59,7 @@ class Grammar:
         self._start = start
     
     @cached_property
-    def rules(self) -> typing.Iterable[Rule]:
+    def rules(self) -> typing.Collection[Rule]:
         return self._rules
     
     @cached_property
