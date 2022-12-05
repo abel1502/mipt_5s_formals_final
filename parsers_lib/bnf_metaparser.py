@@ -2,6 +2,7 @@ from __future__ import annotations
 import typing
 import io
 import enum
+import os
 
 
 from .basic_tokenizer import *
@@ -22,7 +23,7 @@ class BNFMetaParser:
         parse_numbers=False,
         punct_lookup=lookup_from_enum(_Punct),
         name_chars=lambda ch: ch.isalnum() or ch in "-_",
-        line_comments=("//",),
+        line_comments=("//", "#"),
         block_comments={"/*": "*/"},
     )
     
@@ -53,16 +54,20 @@ class BNFMetaParser:
     def _parse_grammar(self) -> None:
         while not self._source.is_over():
             self._parse_rule()
+        
+        self._expect(EOFTok)
     
     def _parse_rule(self) -> None:
         lhs: Nonterminal = self._parse_nonterminal()
+        
+        self._expect(PunctTok(self._Punct.RULE_DEF))
         
         for rhs in self._parse_rhs_variants():
             self._grammar.add_rule(Rule(lhs, rhs))
         
         self._expect(PunctTok(self._Punct.SEMICOLON))
     
-    def _parse_rhs_variants(self) -> typing.Generator[typing.List[BaseSymbol], None, None]:
+    def _parse_rhs_variants(self) -> typing.Generator[typing.Collection[BaseSymbol], None, None]:
         while True:
             yield self._parse_rhs()
             
@@ -71,7 +76,7 @@ class BNFMetaParser:
             
             self._source.next()
     
-    def _parse_rhs(self) -> typing.List[BaseSymbol]:
+    def _parse_rhs(self) -> typing.Collection[BaseSymbol]:
         result: typing.List[BaseSymbol] = []
         
         while True:
@@ -107,3 +112,29 @@ class BNFMetaParser:
     def _parse_terminal(self) -> Terminal:
         return Terminal(self._expect(StringTok).value)
 
+
+@typing.overload
+def metaparse_bnf_grammar(*, data: str | io.TextIOBase) -> Grammar:
+    ...
+
+@typing.overload
+def metaparse_bnf_grammar(*, path: os.PathLike) -> Grammar:
+    ...
+
+def metaparse_bnf_grammar(*, data=None, path=None) -> Grammar:
+    assert data is None or path is None, "Both data and path specified"
+    
+    if path is not None:
+        with open(path, "r") as f:
+            return BNFMetaParser(f).parse()
+    
+    if data is not None:
+        return BNFMetaParser(data).parse()
+    
+    assert False, "Neither data nor path specified"
+
+
+__all__ = [
+    "BNFMetaParser",
+    "metaparse_bnf_grammar",
+]

@@ -28,6 +28,18 @@ def only(iterable: typing.Iterable[T]) -> T:
     raise ValueError("Expected exactly one element, but got more")
 
 
+def compare_iterables(*iterables: typing.Iterable[T]) -> bool:
+    """
+    Returns True if all iterables are equal, False otherwise
+    """
+    
+    for values in itertools.zip_longest(*iterables, fillvalue=object()):
+        if not all(value == values[0] for value in values[1:]):
+            return False
+    
+    return True
+
+
 # class VirtualMapping(typing.Generic[T, K], typing.Mapping[K, T]):
 #     def __init__(self, generator: typing.Callable[[T], K]):
 #         self.generator = generator
@@ -44,5 +56,6 @@ def only(iterable: typing.Iterable[T]) -> T:
 
 __all__ = [
     "only",
+    "compare_iterables",
     # "VirtualMapping",
 ]

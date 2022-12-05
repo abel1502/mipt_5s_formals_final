@@ -38,7 +38,11 @@ class Terminal(BaseSymbol):
 @dataclasses.dataclass(frozen=True, repr=False)
 class Rule:
     lhs: Nonterminal
-    rhs: typing.List[BaseSymbol] = dataclasses.field(default_factory=list)
+    rhs: typing.Collection[BaseSymbol] = dataclasses.field(default_factory=tuple)
+    
+    def __init__(self, lhs: Nonterminal, rhs: typing.Collection[BaseSymbol] = ()):
+        object.__setattr__(self, "lhs", lhs)
+        object.__setattr__(self, "rhs", tuple(rhs))
     
     def __len__(self):
         return len(self._rules)
@@ -125,7 +129,7 @@ class Grammar:
         self._rules.add(rule)
     
     def create_rule(self, lhs: str | Nonterminal, rhs: typing.Iterable[str | Nonterminal]) -> None:
-        self.add_rule(Rule(lhs, list(rhs)))
+        self.add_rule(Rule(lhs, tuple(rhs)))
     
     def get_rules_by_lhs(self, lhs: Nonterminal) -> typing.Iterable[Rule]:
         return filter(lambda rule: rule.lhs == lhs, self._rules)

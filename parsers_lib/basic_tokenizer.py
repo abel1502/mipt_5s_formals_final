@@ -63,8 +63,8 @@ class EOFTok(Token):
 @dataclasses.dataclass(frozen=True)
 class BasicTokenizerConfig(typing.Generic[P, K]):
     parse_numbers: bool = True
-    punct_lookup: typing.Mapping[str, P] | None = None
-    kwd_lookup: typing.Mapping[str, K] | None = None
+    punct_lookup: typing.Mapping[str, P] = dataclasses.field(default_factory=dict)
+    kwd_lookup: typing.Mapping[str, K] = dataclasses.field(default_factory=dict)
     # Note: if parse_numbers is True, then the first letter cannot be a digit
     #       (even if the identifier wouldn't form a valid number)
     name_chars: typing.Container[str] | typing.Callable[[str], bool] = \
@@ -91,6 +91,7 @@ class _Trie(typing.Generic[T]):
     @dataclasses.dataclass()
     class Node:
         verdict: T
+        master: _Trie[T]
         children: typing.Dict[str, _Trie.Node] = dataclasses.field(default_factory=dict)
         
         def is_term(self) -> bool:
@@ -99,10 +100,10 @@ class _Trie(typing.Generic[T]):
         def get_child(self, ch: str) -> _Trie.Node:
             assert len(ch) == 1
             
-            return self.children.get(ch, _Trie._sentinel)
+            return self.children.get(ch, self.master._sentinel)
         
         def add_child(self, ch: str, verdict: T) -> _Trie.Node:
-            return self.children.setdefault(ch, _Trie.Node(verdict))
+            return self.children.setdefault(ch, _Trie.Node(verdict, self.master))
     
     class WordChecker:
         _node: _Trie.Node
@@ -125,7 +126,7 @@ class _Trie(typing.Generic[T]):
             self._word.append(ch)
         
         def restart(self) -> None:
-            self._node = self._root
+            self._node = self._node.master._root
             self._word = []
         
         def get_verdict(self) -> T:
@@ -141,8 +142,8 @@ class _Trie(typing.Generic[T]):
     
     def __init__(self, verdict_none: T):
         self._verdict_none = verdict_none
-        self._root = self.Node(verdict_none)
-        self._sentinel = self.Node(verdict_none)
+        self._root = self.Node(verdict_none, self)
+        self._sentinel = self.Node(verdict_none, self)
     
     def add_word(self, word: str, verdict: T) -> None:
         verdict_none = self._verdict_none
@@ -180,6 +181,11 @@ class BasicTokenizer(typing.Generic[P, K]):
         NONE = enum.auto()
         ESCAPE = enum.auto()
         END_QUOTE = enum.auto()
+    
+    class _BlockCommentVerdict(enum.IntEnum):
+        NONE = enum.auto()
+        START = enum.auto()
+        END = enum.auto()
     
     _config: BasicTokenizerConfig[P, K]
     _input: PeekableTextIO
@@ -225,10 +231,19 @@ class BasicTokenizer(typing.Generic[P, K]):
     
     @cached_property
     def _string_trie(self) -> _Trie[_StringVerdict]:
-        trie = _Trie(self._MiscTokVerdict.NONE)
+        trie = _Trie(self._StringVerdict.NONE)
         
-        trie.add_wordlist(("\\" + k for k in self.string_escapes.keys()), self._StringVerdict.ESCAPE)
+        trie.add_wordlist(("\\" + k for k in self._config.string_escapes.keys()), self._StringVerdict.ESCAPE)
         trie.add_wordlist(self._config.string_quotes.values(), self._StringVerdict.END_QUOTE)
+        
+        return trie
+    
+    @cached_property
+    def _block_comment_trie(self) -> _Trie[_StringVerdict]:
+        trie = _Trie(self._BlockCommentVerdict.NONE)
+        
+        trie.add_wordlist(self._config.block_comments.keys(), self._BlockCommentVerdict.START)
+        trie.add_wordlist(self._config.block_comments.values(), self._BlockCommentVerdict.END)
         
         return trie
     
@@ -238,7 +253,6 @@ class BasicTokenizer(typing.Generic[P, K]):
         is_space_char = self._is_space_char
         parse_numbers = self._config.parse_numbers
         
-        
         # This is the first and last time I'll comment on this, so please note:
         # PeekableStreamIterator is implemented in a specific way that allows for
         # this kind of usage. All iterators are synchronized with the stream,
@@ -246,7 +260,7 @@ class BasicTokenizer(typing.Generic[P, K]):
         # the tokenization logic in a way that is very easy to understand,
         # without any need for explicit lookaheads or backtracking.
         for ch in self._input:
-            if is_space_char(ch):
+            if is_space_char(ch) or not ch:
                 continue
             elif parse_numbers and ch.isdigit():
                 yield self._parse_number()
@@ -293,24 +307,22 @@ class BasicTokenizer(typing.Generic[P, K]):
             raise ParseError(f"Invalid punctuation/comment: {word}")
         
         if verdict == self._MiscTokVerdict.PUNCT:
-            yield PunctTok(word)
+            yield PunctTok(self._config.punct_lookup[word])
             return
         
         if verdict == self._MiscTokVerdict.STRING_QUOTE:
             yield self._parse_string(word)
             return
         
-        until: str
-        
         if verdict == self._MiscTokVerdict.LINE_COMMENT:
-            until = "\n"
-        else:  # verdict == self._TrieVerdict.BLOCK_COMMENT
-            until = self._config.block_comments[word]
+            self._parse_line_comment()
+            return
         
-        for ch in self._input:
-            if ch == until:
-                self._input.next()
-                break
+        if verdict == self._MiscTokVerdict.BLOCK_COMMENT:
+            self._parse_block_comment(word)
+            return
+        
+        assert False, "Unreachable"
     
     def _parse_string(self, start_quote: str) -> StringTok:
         end_quote: typing.Final[str] = self._config.string_quotes[start_quote]
@@ -325,13 +337,12 @@ class BasicTokenizer(typing.Generic[P, K]):
                 word: str = checker.get_word()
                 
                 if verdict == self._StringVerdict.NONE:
-                    self.result.append(word)
+                    result.append(word)
                 elif verdict == self._StringVerdict.ESCAPE:
                     assert word.startswith("\\")
                     
-                    self.result.append(self.string_escapes[word.removeprefix("\\")])
+                    result.append(self.string_escapes[word.removeprefix("\\")])
                 elif word == end_quote:  # verdict == self._StringVerdict.END_QUOTE
-                    self._input.next()
                     break
                 
                 checker.restart()
@@ -342,6 +353,39 @@ class BasicTokenizer(typing.Generic[P, K]):
             checker.go(ch)
         
         return StringTok("".join(result), start_quote)
+
+    def _parse_line_comment(self) -> None:
+        for ch in self._input:
+            if ch == "\n":
+                break
+    
+    def _parse_block_comment(self, start: str) -> None:
+        end = self._config.block_comments[start]
+        
+        checker = self._block_comment_trie.create_checker()
+        balance: int = 1
+        
+        for ch in self._input:
+            if checker.is_term():
+                verdict: self._BlockCommentVerdict = checker.get_verdict()
+                word: str = checker.get_word()
+                
+                if verdict == self._BlockCommentVerdict.NONE:
+                    pass
+                elif verdict == self._BlockCommentVerdict.START:
+                    balance += word == start
+                elif verdict == self._BlockCommentVerdict.END:
+                    balance -= word == end
+                
+                if balance == 0:
+                    break
+                
+                checker.restart()
+            
+            if not ch:
+                raise ParseError("Unterminated block comment")
+            
+            checker.go(ch)
 
 
 __all__ = [

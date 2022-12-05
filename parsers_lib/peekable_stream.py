@@ -40,15 +40,16 @@ class PeekableStream(typing.Generic[T]):
         return self._sentinel
     
     def _refill(self) -> None:
-        try:
-            self._peeked.extend(itertools.islice(self._source, self._limit - len(self._peeked)))
-        except StopIteration:
+        self._peeked.extend(itertools.islice(self._source, self._limit - len(self._peeked)))
+        
+        if len(self._peeked) < self._limit:
             self._source = itertools.repeat(self._sentinel)
             self._refill()
     
     def next(self) -> T:
         result: T = self._peeked.popleft()
         self._refill()
+        self._pos += 1
         return result
     
     def skip(self, cnt: int) -> None:
@@ -122,6 +123,8 @@ class PeekableStreamIterator(typing.Generic[T]):
             # Meant to take effect next time
             self._exhausted = True
         
+        # print(f"peek >> {repr(self._master.peek1())}")
+        
         return self._master.peek1()
 
 
@@ -142,6 +145,9 @@ class PeekableTextIO(PeekableStream[str]):
 
     def peek(self, cnt: int) -> str:
         return ''.join(super().peek(cnt))
+
+    def peek1(self) -> str:
+        return self.peek(1)
 
 
 __all__ = [
