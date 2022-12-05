@@ -1,0 +1,8 @@
+# Showing off some cool features of my BNF dialect
+<start> ::= "a" <start> "b" <start> | "b" <start> "a" <start>;
+/* Yay, awesome! */
+<start> ::= "";
+// Yup
+<aboba-7> ::= "abo\nba\"" /*
+    /* Check out this crazy nested comment wizardry! Better than C! :) */
+*/ <aboba-7>;  // Ya like it?

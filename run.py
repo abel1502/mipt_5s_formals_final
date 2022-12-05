@@ -15,16 +15,8 @@ parser = argparse.ArgumentParser(
 def main():
     args = parser.parse_args()
     
-    sample_grammar = """
-    # Showing off some cool features of my BNF dialect
-    <start> ::= "a" <start> "b" <start> | "b" <start> "a" <start>;
-    /* Yay, awesome! */
-    <start> ::= "";
-    // Yup
-    """
-    
     # print(list(parsers.BasicTokenizer(sample_grammar, parsers.BNFMetaParser._TOKENIZER_CONFIG).tokenize()))
-    print(parsers.metaparse_bnf_grammar(data=sample_grammar))
+    print(parsers.metaparse_bnf_grammar(path="grammars/sample.bnf"))
 
 
 if __name__ == "__main__":
