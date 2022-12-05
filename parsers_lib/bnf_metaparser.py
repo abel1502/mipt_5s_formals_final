@@ -9,9 +9,10 @@ from .basic_tokenizer import *
 from .peekable_stream import PeekableStream
 from .grammar import *
 from .errors import ParseError
+from .abstract_parser import Parser
 
 
-class BNFMetaParser:
+class BNFMetaParser(Parser[Grammar]):
     class _Punct(enum.Enum):
         RULE_DEF = "::="
         OR = "|"
@@ -30,14 +31,27 @@ class BNFMetaParser:
     _source: PeekableStream[Token]
     _grammar: Grammar
     
-    def __init__(self, source: str | io.TextIOBase):
+    def __init__(self):
+        pass
+    
+    def feed(self, source: str | io.TextIOBase, start_nonterm: str = "start") -> None:
+        """
+        Supply a source of text to parse. Note that it doesn't add to the existing source, it replaces it.
+        """
+        
         self._source = PeekableStream(BasicTokenizer(source, self._TOKENIZER_CONFIG).tokenize(), limit=1, sentinel=EOFTok())
-        self._grammar = Grammar(start="start")
+        self._grammar = Grammar(start=start_nonterm)
     
     def parse(self) -> Grammar:
+        if not self._is_initialized():
+            raise RuntimeError("Parser is not initialized")
+        
         self._parse_grammar()
         
         return self._grammar
+    
+    def _is_initialized(self) -> bool:
+        return hasattr(self, "_source")
     
     def _expect(self, expected: Token | typing.Type[Token]) -> Token:
         tok = self._source.peek1()

@@ -140,8 +140,8 @@ class PeekableTextIO(PeekableStream[str]):
             
             yield ch
     
-    def __init__(self, source: io.TextIOBase, limit: int, filler: str = ''):
-        super().__init__(self._iter_from_io(source), limit, filler)
+    def __init__(self, source: io.TextIOBase, limit: int, sentinel: str = ''):
+        super().__init__(self._iter_from_io(source), limit, sentinel)
 
     def peek(self, cnt: int) -> str:
         return ''.join(super().peek(cnt))
