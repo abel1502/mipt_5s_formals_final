@@ -56,10 +56,15 @@ class KwdTok(Token, typing.Generic[K]):
 
 
 @dataclasses.dataclass(frozen=True)
+class EOFTok(Token):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
 class BasicTokenizerConfig(typing.Generic[P, K]):
     parse_numbers: bool = True
-    punct_lookup: typing.Dict[str, P] | None = None
-    kwd_lookup: typing.Dict[str, K] | None = None
+    punct_lookup: typing.Mapping[str, P] | None = None
+    kwd_lookup: typing.Mapping[str, K] | None = None
     # Note: if parse_numbers is True, then the first letter cannot be a digit
     #       (even if the identifier wouldn't form a valid number)
     name_chars: typing.Container[str] | typing.Callable[[str], bool] = \
@@ -67,14 +72,19 @@ class BasicTokenizerConfig(typing.Generic[P, K]):
     space_chars: typing.Container[str] | typing.Callable[[str], bool] = \
         str.isspace
     line_comments: typing.Collection[str] = ()
-    block_comments: typing.Dict[str, str] = dataclasses.field(default_factory=dict)
-    string_quotes: typing.Dict[str, str] = dataclasses.field(default_factory=lambda: {
+    block_comments: typing.Mapping[str, str] = dataclasses.field(default_factory=dict)
+    string_quotes: typing.Mapping[str, str] = dataclasses.field(default_factory=lambda: {
         "'": "'", '"': '"',
     })
-    chainable_strings: bool = False
-    string_escapes: typing.Dict[str, str] = dataclasses.field(default_factory=lambda: {
+    # chainable_strings: bool = False
+    string_escapes: typing.Mapping[str, str] = dataclasses.field(default_factory=lambda: {
         "\\": "\\", "n": "\n", "t": "\t", "r": "\r", "0": "\0",
     })
+
+
+_E = typing.TypeVar("_E", bound=enum.Enum)
+def lookup_from_enum(enum: typing.Type[_E]) -> typing.Dict[str, _E]:
+    return {member.value: member for member in enum}
 
 
 class _Trie(typing.Generic[T]):
@@ -341,6 +351,8 @@ __all__ = [
     "NumberTok",
     "PunctTok",
     "KwdTok",
+    "EOFTok",
     "BasicTokenizerConfig",
+    "lookup_from_enum",
     "BasicTokenizer",
 ]

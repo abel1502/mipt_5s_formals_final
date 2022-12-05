@@ -43,6 +43,13 @@ class Rule:
     def __len__(self):
         return len(self._rules)
     
+    def get_nonterminals(self) -> typing.Generator[Nonterminal, None, None]:
+        yield self.lhs
+        
+        for symbol in self.rhs:
+            if isinstance(symbol, Nonterminal):
+                yield symbol
+    
     def __repr__(self):
         return f"<{self.lhs} -> {' '.join(map(str, self.rhs))}>"
 
@@ -92,15 +99,33 @@ class Grammar:
             nonterm: Nonterminal = self.nonterminals[nonterm]
         
         return nonterm
+    
+    def add_nonterminal(self, nonterm: Nonterminal | str) -> Nonterminal:
+        if isinstance(nonterm, str):
+            nonterm = Nonterminal(nonterm)
+        
+        if self.has_nonterminal(nonterm.name):
+            raise KeyError(f"Duplicate nonterminal name: {nonterm.name}")
+        
+        self._nonterminals[nonterm.name] = nonterm
 
-    def add_rule(self, rule: Rule):
+    def ensure_nonterminal(self, nonterm: str | Nonterminal) -> Nonterminal:
+        if isinstance(nonterm, str):
+            nonterm = Nonterminal(nonterm)
+        
+        if not self.has_nonterminal(nonterm):
+            self.add_nonterminal(nonterm)
+        
+        return nonterm
+    
+    def add_rule(self, rule: Rule) -> None:
+        for nonterm in rule.get_nonterminals():
+            self.ensure_nonterminal(nonterm)
+        
         self._rules.add(rule)
     
-    def create_rule(self, lhs: str | Nonterminal, rhs: typing.Iterable[str | Nonterminal]) -> Rule:
-        lhs: Nonterminal = self.resolve_nonterminal(lhs)
-        rhs = list(map(self.resolve_nonterminal, rhs))
-        
-        return Rule(lhs, rhs)
+    def create_rule(self, lhs: str | Nonterminal, rhs: typing.Iterable[str | Nonterminal]) -> None:
+        self.add_rule(Rule(lhs, list(rhs)))
     
     def get_rules_by_lhs(self, lhs: Nonterminal) -> typing.Iterable[Rule]:
         return filter(lambda rule: rule.lhs == lhs, self._rules)
