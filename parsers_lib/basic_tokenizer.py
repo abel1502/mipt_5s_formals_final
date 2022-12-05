@@ -79,6 +79,7 @@ class BasicTokenizerConfig(typing.Generic[P, K]):
     # chainable_strings: bool = False
     string_escapes: typing.Mapping[str, str] = dataclasses.field(default_factory=lambda: {
         "\\": "\\", "n": "\n", "t": "\t", "r": "\r", "0": "\0",
+        '"': '"', "'": "'",
     })
 
 
@@ -341,7 +342,7 @@ class BasicTokenizer(typing.Generic[P, K]):
                 elif verdict == self._StringVerdict.ESCAPE:
                     assert word.startswith("\\")
                     
-                    result.append(self.string_escapes[word.removeprefix("\\")])
+                    result.append(self._config.string_escapes[word.removeprefix("\\")])
                 elif word == end_quote:  # verdict == self._StringVerdict.END_QUOTE
                     break
                 
