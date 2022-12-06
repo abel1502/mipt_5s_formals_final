@@ -48,10 +48,15 @@ class BNFMetaParser(Parser[Grammar]):
         
         self._parse_grammar()
         
+        self._uninitialize()
+        
         return self._grammar
     
     def _is_initialized(self) -> bool:
         return hasattr(self, "_source")
+    
+    def _uninitialize(self) -> None:
+        del self._source
     
     def _expect(self, expected: Token | typing.Type[Token]) -> Token:
         tok = self._source.peek1()
@@ -124,6 +129,8 @@ class BNFMetaParser(Parser[Grammar]):
         return Nonterminal(name)
     
     def _parse_terminal(self) -> Terminal:
+        # TODO: Split into many single-character terminals?
+        # I'll let the user do that manually for now, but it might be a good idea to do it automatically.
         return Terminal(self._expect(StringTok).value)
 
 

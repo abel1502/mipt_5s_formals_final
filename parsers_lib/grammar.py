@@ -69,11 +69,11 @@ class Grammar:
         
         self._start = start
     
-    @cached_property
+    @property
     def rules(self) -> typing.Collection[Rule]:
         return self._rules
     
-    @cached_property
+    @property
     def nonterminals(self) -> typing.Mapping[str, Nonterminal]:
         return self._nonterminals
     
@@ -83,7 +83,7 @@ class Grammar:
     
     @cached_property
     def new_start(self) -> Nonterminal:
-        value = Nonterminal(f"_new_start")
+        value = Nonterminal(f"__new_start__")
         
         assert not self.has_nonterminal(value)
         
@@ -136,6 +136,7 @@ class Grammar:
     
     def prune(self) -> None:
         self._prune_unused_nonterminals()
+        self._prune_empty_terminals()
     
     def _prune_unused_nonterminals(self) -> None:
         # Trigger it here just to make sure it's already created
@@ -146,6 +147,36 @@ class Grammar:
         # used_nonterminals.add(self.start)  # Unnecessary, since it's always used by the new start rule
         
         self._nonterminals -= used_nonterminals
+    
+    def _prune_empty_terminals(self) -> None:
+        for rule in self._rules:
+            if not rule.rhs:
+                self._rules.remove(rule)
+    
+    def split_long_terminals(self) -> Grammar:
+        """
+        Creates a new grammar equivalent to this one, but having no terminals longer than 1 character.
+        """
+        
+        # TODO: Perhaps do in-place instead?
+        
+        new_grammar = Grammar()
+        
+        for rule in self.rules:
+            if rule.lhs == self.new_start:
+                continue  # Skip the new start rule
+            
+            new_rhs = []
+            
+            for symbol in rule.rhs:
+                if isinstance(symbol, Terminal) and len(symbol.value) > 1:
+                    new_rhs.extend(Terminal(char) for char in symbol.value)
+                else:
+                    new_rhs.append(symbol)
+            
+            new_grammar.add_rule(Rule(rule.lhs, new_rhs))
+        
+        return new_grammar
     
     def __repr__(self):
         return f"Grammar({', '.join(map(repr, self._rules))})"
