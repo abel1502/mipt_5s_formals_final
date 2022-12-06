@@ -2,6 +2,7 @@ from __future__ import annotations
 import typing
 import io
 import dataclasses
+import itertools
 
 
 from .grammar import *
@@ -60,6 +61,9 @@ class Table:
             state.rule == start_rule and state.rule_pos == len(state.rule)
             for state in self.states
         )
+    
+    def __iter__(self) -> typing.Iterator[State]:
+        return itertools.chain(self.states, self.new_states)
 
 
 class EarleyParserConfig(typing.Generic[T]):
@@ -157,7 +161,7 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
             self._cur_table.add_state(State(rule, start_offset=self._cur_idx))
     
     def _complete(self, state: State) -> None:
-        for prev_state in self._tables[state.start_offset].states:
+        for prev_state in list(self._tables[state.start_offset]):
             next_item: BaseSymbol | None = prev_state.get_next_item()
             
             if next_item != state.rule.lhs:
