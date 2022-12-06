@@ -1,7 +1,7 @@
 from __future__ import annotations
 import typing
-import functools
-import itertools
+# import functools
+# import itertools
 
 
 T = typing.TypeVar("T")
@@ -28,16 +28,16 @@ def only(iterable: typing.Iterable[T]) -> T:
     raise ValueError("Expected exactly one element, but got more")
 
 
-def compare_iterables(*iterables: typing.Iterable[T]) -> bool:
-    """
-    Returns True if all iterables are equal, False otherwise
-    """
+# def compare_iterables(*iterables: typing.Iterable[T]) -> bool:
+#     """
+#     Returns True if all iterables are equal, False otherwise
+#     """
     
-    for values in itertools.zip_longest(*iterables, fillvalue=object()):
-        if not all(value == values[0] for value in values[1:]):
-            return False
+#     for values in itertools.zip_longest(*iterables, fillvalue=object()):
+#         if not all(value == values[0] for value in values[1:]):
+#             return False
     
-    return True
+#     return True
 
 
 # class VirtualMapping(typing.Generic[T, K], typing.Mapping[K, T]):
@@ -56,6 +56,6 @@ def compare_iterables(*iterables: typing.Iterable[T]) -> bool:
 
 __all__ = [
     "only",
-    "compare_iterables",
+    # "compare_iterables",
     # "VirtualMapping",
 ]

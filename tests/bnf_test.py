@@ -57,6 +57,30 @@ class BNFMetaParserTest(unittest.TestCase):
                 Rule(Nonterminal("start"), [StrTerminal("\\\"d\"\'\r\n")]),
             }, start=Nonterminal("start")
         ))
+    
+    def test_empty_rule(self) -> None:
+        self.check("<start> ::= ;", Grammar(
+            rules={
+                Rule(Nonterminal("start"), []),
+            }, start=Nonterminal("start")
+        ))
+    
+    def test_repetition(self) -> None:
+        self.check("<start> ::= 'a' | 'b'; <start> ::= 'c';", Grammar(
+            rules={
+                Rule(Nonterminal("start"), [StrTerminal("a")]),
+                Rule(Nonterminal("start"), [StrTerminal("b")]),
+                Rule(Nonterminal("start"), [StrTerminal("c")]),
+            }, start=Nonterminal("start")
+        ))
+    
+    def test_duplicates(self) -> None:
+        self.check("<start> ::= 'a' | 'b'; <start> ::= 'a' | 'b';", Grammar(
+            rules={
+                Rule(Nonterminal("start"), [StrTerminal("a")]),
+                Rule(Nonterminal("start"), [StrTerminal("b")]),
+            }, start=Nonterminal("start")
+        ))
 
 
 if __name__ == "__main__":

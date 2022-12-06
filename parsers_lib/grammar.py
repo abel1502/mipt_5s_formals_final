@@ -71,7 +71,7 @@ class Rule:
         object.__setattr__(self, "rhs", tuple(rhs))
     
     def __len__(self):
-        return len(self._rules)
+        return len(self.rhs)
     
     def get_nonterminals(self) -> typing.Generator[Nonterminal, None, None]:
         yield self.lhs
@@ -109,11 +109,13 @@ class Grammar:
     
     @cached_property
     def new_start(self) -> Nonterminal:
-        value = Nonterminal(f"__new_start__")
+        value = Nonterminal("__new_start__")
         
-        assert not self.has_nonterminal(value)
+        assert not self.has_nonterminal(value), "New start nonterminal must be created once"
         
         self.add_rule(Rule(value, [self.start]))
+        
+        return value
     
     def has_nonterminal(self, nonterm: str | Nonterminal) -> bool:
         if isinstance(nonterm, Nonterminal):
@@ -180,7 +182,8 @@ class Grammar:
         
         # TODO: Perhaps do in-place instead?
         
-        new_grammar = Grammar()
+        new_grammar = Grammar(start=self.start)
+        self.new_start  # Trigger it here just to make sure it's already created
         
         for rule in self.rules:
             if rule.lhs == self.new_start:
@@ -190,6 +193,7 @@ class Grammar:
             
             for symbol in rule.rhs:
                 if not symbol.isTerminal():
+                    assert symbol != self.new_start
                     new_rhs.append(symbol)
                     continue
                 
@@ -203,8 +207,6 @@ class Grammar:
                 new_rhs.extend(StrTerminal(char) for char in symbol.value)
             
             new_grammar.add_rule(Rule(rule.lhs, new_rhs))
-        
-        new_grammar._prune_empty_terminals()
         
         return new_grammar
     

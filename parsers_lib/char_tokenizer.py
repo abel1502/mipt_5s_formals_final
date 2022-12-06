@@ -20,3 +20,7 @@ class CharTokenizer(Tokenizer):
         for s in self._source:
             yield from s
 
+
+__all__ = [
+    "CharTokenizer",
+]

@@ -1,2 +1,3 @@
 from . import grammar, utils, basic_tokenizer, peekable_stream, errors, \
-    abstract_parser, abstract_tokenizer, bnf_metaparser, earleay_parser
+    abstract_parser, abstract_tokenizer, char_tokenizer, bnf_metaparser, \
+    earleay_parser

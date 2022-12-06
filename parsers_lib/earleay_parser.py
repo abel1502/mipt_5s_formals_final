@@ -103,6 +103,8 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
         for tok in self._source:
             self._step(tok)
         
+        self._step(None)
+        
         result: bool = self._cur_table.is_successful(self._config.start_rule)
         
         self._uninitialize()
@@ -127,7 +129,7 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
     def _cur_idx(self) -> int:
         return len(self._tables) - 2
     
-    def _step(self, tok: T) -> None:
+    def _step(self, tok: T | None) -> None:
         self._tables.append(Table())
         
         table: typing.Final[Table] = self._cur_table
@@ -138,13 +140,15 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
             
             if next_item is None:
                 self._complete(state)
-            
-            if next_item.isTerminal():
+            elif next_item.isTerminal():
                 self._scan(state, next_item, tok)
             else:
                 self._predict(next_item)
     
-    def _scan(self, state: State, terminal: Terminal[T], tok: T) -> None:
+    def _scan(self, state: State, terminal: Terminal[T], tok: T | None) -> None:
+        if tok is None:
+            return
+        
         if terminal.matches(tok):
             self._next_table.add_state(state.shifted())
     
