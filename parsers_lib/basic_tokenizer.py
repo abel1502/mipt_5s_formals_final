@@ -13,6 +13,7 @@ from functools import cached_property
 from . import grammar
 from .peekable_stream import PeekableTextIO
 from .errors import ParseError
+from .abstract_tokenizer import *
 
 
 T = typing.TypeVar("T")
@@ -20,13 +21,14 @@ P = typing.TypeVar("P")
 K = typing.TypeVar("K")
 
 
-class Token(grammar.BaseSymbol):  # Automatically an ABC, but has no abstract methods
+class Token(grammar.Terminal["Token"]):  # Automatically an ABC, but has no abstract methods
     def __init__(self):
         if type(self) is Token:
             raise TypeError("Token is an abstract class")
     
-    def isTerminal() -> bool:
-        return True
+    # A common base implementation for our specific tokens
+    def matches(self, token: T) -> bool:
+        return self == token
 
 
 @dataclasses.dataclass(frozen=True)
@@ -37,7 +39,6 @@ class NameTok(Token):
 @dataclasses.dataclass(frozen=True)
 class StringTok(Token):
     value: str
-    quotes: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -166,7 +167,7 @@ class _Trie(typing.Generic[T]):
         return self.WordChecker(self._root)
 
 
-class BasicTokenizer(typing.Generic[P, K]):
+class BasicTokenizer(Tokenizer[Token], typing.Generic[P, K]):
     """
     A tokenizer for a common use case, where the tokens are keywords, punctuation and optionally numbers.
     """
@@ -353,7 +354,7 @@ class BasicTokenizer(typing.Generic[P, K]):
             
             checker.go(ch)
         
-        return StringTok("".join(result), start_quote)
+        return StringTok("".join(result))
 
     def _parse_line_comment(self) -> None:
         for ch in self._input:

@@ -10,6 +10,9 @@ from .abstract_parser import Parser
 from .utils import *
 
 
+T = typing.TypeVar("T", bound=Terminal)
+
+
 @dataclasses.dataclass(frozen=True)
 class State:
     rule: Rule
@@ -59,7 +62,7 @@ class Table:
         )
 
 
-class EarleyParserConfig:
+class EarleyParserConfig(typing.Generic[T]):
     start_rule: Rule
     rules_by_lhs: typing.Dict[Nonterminal, typing.List[Rule]]
     
@@ -76,22 +79,19 @@ class EarleyParserConfig:
             self.rules_by_lhs.setdefault(rule.lhs, []).append(rule)
 
 
-class EarleyParser(Parser[bool]):
-    _config: EarleyParserConfig
-    _source: io.TextIOBase
+class EarleyParser(Parser[bool, T], typing.Generic[T]):
+    _config: EarleyParserConfig[T]
+    _source: typing.Iterable[T]
     _tables: typing.List[Table]
     
     
-    def __init__(self, config: EarleyParserConfig):
+    def __init__(self, config: EarleyParserConfig[T]):
         self._config = config
     
-    def feed(self, source: str | io.TextIOBase) -> None:
+    def feed(self, source: typing.Iterable[T]) -> None:
         """
         Supply a source of text to parse. Note that it doesn't add to the existing source, it replaces it.
         """
-        
-        if isinstance(source, str):
-            source = io.StringIO(source)
         
         self._source = source
         self._tables = [Table.initial(self._config.start_rule)]
@@ -100,8 +100,8 @@ class EarleyParser(Parser[bool]):
         if not self._is_initialized():
             raise RuntimeError("Parser is not initialized")
         
-        for ch in self._get_chars():
-            self._step(ch)
+        for tok in self._source:
+            self._step(tok)
         
         result: bool = self._cur_table.is_successful(self._config.start_rule)
         
@@ -115,10 +115,6 @@ class EarleyParser(Parser[bool]):
     def _uninitialize(self) -> None:
         del self._source
     
-    def _get_chars(self) -> typing.Genenerator[str, None, None]:
-        while (letter := self._source.read(1)):
-            yield letter
-    
     @property
     def _cur_table(self) -> Table:
         return self._tables[-2]
@@ -131,7 +127,7 @@ class EarleyParser(Parser[bool]):
     def _cur_idx(self) -> int:
         return len(self._tables) - 2
     
-    def _step(self, ch: str) -> None:
+    def _step(self, tok: T) -> None:
         self._tables.append(Table())
         
         table: typing.Final[Table] = self._cur_table
@@ -140,23 +136,19 @@ class EarleyParser(Parser[bool]):
             
             next_item: BaseSymbol | None = state.get_next_item()
             
-            if isinstance(next_item, Terminal):
-                self._scan(state, next_item, ch)
-            elif isinstance(next_item, Nonterminal):
-                self._predict(state, next_item)
-            else:  # next_item is None
-                assert next_item is None
+            if next_item is None:
                 self._complete(state)
+            
+            if next_item.isTerminal():
+                self._scan(state, next_item, tok)
+            else:
+                self._predict(next_item)
     
-    def _scan(self, state: State, terminal: Terminal, ch: str) -> None:
-        assert len(ch) == 1
-        
-        if terminal.value == "":
-            self._cur_table.add_state(state.shifted())
-        elif terminal.value == ch:
+    def _scan(self, state: State, terminal: Terminal[T], tok: T) -> None:
+        if terminal.matches(tok):
             self._next_table.add_state(state.shifted())
     
-    def _predict(self, state: State, nonterminal: Nonterminal) -> None:
+    def _predict(self, nonterminal: Nonterminal) -> None:
         for rule in self._config.rules_by_lhs[nonterminal]:
             self._cur_table.add_state(State(rule, start_offset=self._cur_idx))
     

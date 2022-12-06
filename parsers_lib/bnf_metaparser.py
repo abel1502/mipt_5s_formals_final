@@ -12,14 +12,14 @@ from .errors import ParseError
 from .abstract_parser import Parser
 
 
-class BNFMetaParser(Parser[Grammar]):
+class BNFMetaParser(Parser[Grammar, Token]):
     class _Punct(enum.Enum):
         RULE_DEF = "::="
         OR = "|"
         LEFT_BRACE = "<"
         RIGHT_BRACE = ">"
         SEMICOLON = ";"
-    
+
     _TOKENIZER_CONFIG: typing.Final[BasicTokenizerConfig[_Punct, None]] = BasicTokenizerConfig(
         parse_numbers=False,
         punct_lookup=lookup_from_enum(_Punct),
@@ -34,12 +34,16 @@ class BNFMetaParser(Parser[Grammar]):
     def __init__(self):
         pass
     
-    def feed(self, source: str | io.TextIOBase, start_nonterm: str = "start") -> None:
+    @staticmethod
+    def make_tokenizer(source: typing.Iterable[str]) -> BasicTokenizer[_Punct, None]:
+        return BasicTokenizer(source, BNFMetaParser._TOKENIZER_CONFIG)
+    
+    def feed(self, source: typing.Iterable[Token], start_nonterm: str = "start") -> None:
         """
         Supply a source of text to parse. Note that it doesn't add to the existing source, it replaces it.
         """
         
-        self._source = PeekableStream(BasicTokenizer(source, self._TOKENIZER_CONFIG).tokenize(), limit=1, sentinel=EOFTok())
+        self._source = PeekableStream(source, limit=1, sentinel=EOFTok())
         self._grammar = Grammar(start=start_nonterm)
     
     def parse(self) -> Grammar:
@@ -128,10 +132,10 @@ class BNFMetaParser(Parser[Grammar]):
         
         return Nonterminal(name)
     
-    def _parse_terminal(self) -> Terminal:
+    def _parse_terminal(self) -> StrTerminal:
         # TODO: Split into many single-character terminals?
         # I'll let the user do that manually for now, but it might be a good idea to do it automatically.
-        return Terminal(self._expect(StringTok).value)
+        return StrTerminal(self._expect(StringTok).value)
 
 
 @typing.overload
@@ -145,12 +149,16 @@ def metaparse_bnf_grammar(*, path: os.PathLike) -> Grammar:
 def metaparse_bnf_grammar(*, data=None, path=None) -> Grammar:
     assert data is None or path is None, "Both data and path specified"
     
+    parser = BNFMetaParser()
+    
     if path is not None:
         with open(path, "r") as f:
-            return BNFMetaParser(f).parse()
+            parser.feed(BNFMetaParser.make_tokenizer(f))
+            return parser.parse()
     
     if data is not None:
-        return BNFMetaParser(data).parse()
+        parser.feed(BNFMetaParser.make_tokenizer(data))
+        return parser.parse()
     
     assert False, "Neither data nor path specified"
 

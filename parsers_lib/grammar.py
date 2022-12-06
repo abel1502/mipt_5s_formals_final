@@ -7,9 +7,35 @@ from functools import cached_property
 from .utils import *
 
 
+T = typing.TypeVar("T")
+
+
 class BaseSymbol(abc.ABC):
+    """
+    Base class for all symbols in a grammar
+    """
+    
     @abc.abstractmethod
     def isTerminal() -> bool:
+        ...
+
+
+class Terminal(BaseSymbol, typing.Generic[T]):
+    """
+    Base class for all terminals.
+    
+    Provided for extensibility.
+    """
+    
+    def isTerminal(self) -> bool:
+        return True
+    
+    @abc.abstractmethod
+    def matches(self, token: T) -> bool:
+        """
+        Returns whether the given token matches this terminal.
+        """
+
         ...
 
 
@@ -25,11 +51,11 @@ class Nonterminal(BaseSymbol):
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
-class Terminal(BaseSymbol):
+class StrTerminal(Terminal[str]):
     value: str
     
-    def isTerminal(self) -> bool:
-        return True
+    def matches(self, token: str) -> bool:
+        return self.value == token
     
     def __repr__(self):
         return repr(self.value)
@@ -51,7 +77,7 @@ class Rule:
         yield self.lhs
         
         for symbol in self.rhs:
-            if isinstance(symbol, Nonterminal):
+            if not symbol.isTerminal():
                 yield symbol
     
     def __repr__(self):
@@ -136,7 +162,6 @@ class Grammar:
     
     def prune(self) -> None:
         self._prune_unused_nonterminals()
-        self._prune_empty_terminals()
     
     def _prune_unused_nonterminals(self) -> None:
         # Trigger it here just to make sure it's already created
@@ -148,14 +173,9 @@ class Grammar:
         
         self._nonterminals -= used_nonterminals
     
-    def _prune_empty_terminals(self) -> None:
-        for rule in self._rules:
-            if not rule.rhs:
-                self._rules.remove(rule)
-    
     def split_long_terminals(self) -> Grammar:
         """
-        Creates a new grammar equivalent to this one, but having no terminals longer than 1 character.
+        Creates a new grammar equivalent to this one, but having no terminals exactly 1 character long.
         """
         
         # TODO: Perhaps do in-place instead?
@@ -169,12 +189,22 @@ class Grammar:
             new_rhs = []
             
             for symbol in rule.rhs:
-                if isinstance(symbol, Terminal) and len(symbol.value) > 1:
-                    new_rhs.extend(Terminal(char) for char in symbol.value)
-                else:
+                if not symbol.isTerminal():
                     new_rhs.append(symbol)
+                    continue
+                
+                # Note that other custom types of terminals are ignored here
+                if not isinstance(symbol, StrTerminal):
+                    continue
+                
+                if len(symbol.value) == 0:
+                    continue
+                
+                new_rhs.extend(StrTerminal(char) for char in symbol.value)
             
             new_grammar.add_rule(Rule(rule.lhs, new_rhs))
+        
+        new_grammar._prune_empty_terminals()
         
         return new_grammar
     
@@ -186,6 +216,7 @@ __all__ = [
     "BaseSymbol",
     "Nonterminal",
     "Terminal",
+    "StrTerminal",
     "Rule",
     "Grammar",
 ]
