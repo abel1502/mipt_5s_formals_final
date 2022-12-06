@@ -346,6 +346,9 @@ class BasicTokenizer(Tokenizer[Token], typing.Generic[P, K]):
                     result.append(self._config.string_escapes[word.removeprefix("\\")])
                 elif word == end_quote:  # verdict == self._StringVerdict.END_QUOTE
                     break
+                else:  # verdict == self._StringVerdict.END_QUOTE, but word != end_quote
+                    # It's a literal quote, just add it as is
+                    result.append(word)
                 
                 checker.restart()
             
