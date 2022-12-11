@@ -70,8 +70,6 @@ class EarleyParserConfig(typing.Generic[T]):
     rules_by_lhs: typing.Dict[Nonterminal, typing.List[Rule[T]]]
     
     def __init__(self, grammar: Grammar[T]):
-        grammar = grammar.split_long_terminals()
-        
         self.start_rule = only(grammar.get_rules_by_lhs(grammar.new_start))
         self.rules_by_lhs = {}
         

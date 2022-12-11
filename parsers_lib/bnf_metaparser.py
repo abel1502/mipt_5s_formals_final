@@ -54,6 +54,8 @@ class BNFMetaParser(Parser[Grammar, Token]):
         
         self._uninitialize()
         
+        self._grammar = self._grammar.split_long_terminals()
+        
         return self._grammar
     
     def _is_initialized(self) -> bool:

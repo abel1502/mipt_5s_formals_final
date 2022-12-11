@@ -3,6 +3,7 @@ import typing
 import dataclasses
 import abc
 from functools import cached_property
+import itertools
 
 from .utils import *
 
@@ -179,6 +180,15 @@ class Grammar(typing.Generic[T]):
         # used_nonterminals.add(self.start)  # Unnecessary, since it's always used by the new start rule
         
         self._nonterminals -= used_nonterminals
+    
+    def get_all_terminals(self) -> typing.Iterable[Terminal[T]]:
+        """
+        Returns all unique terminals used in this grammar.
+        """
+        
+        return set(itertools.chain.from_iterable(
+            rule.get_terminals() for rule in self._rules
+        ))
     
     def split_long_terminals(self: Grammar[str]) -> Grammar[str]:
         """
