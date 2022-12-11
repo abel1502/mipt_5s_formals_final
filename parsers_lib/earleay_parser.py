@@ -1,13 +1,12 @@
 from __future__ import annotations
 import typing
-import io
 import dataclasses
 import itertools
 
 
 from .grammar import *
 from .errors import ParseError
-from .abstract_parser import Parser
+from .abstract_parser import *
 from .utils import *
 
 
@@ -15,8 +14,8 @@ T = typing.TypeVar("T", bound=Terminal)
 
 
 @dataclasses.dataclass(frozen=True)
-class State:
-    rule: Rule
+class State(typing.Generic[T]):
+    rule: Rule[T]
     rule_pos: int = 0
     start_offset: int = 0
     
@@ -26,7 +25,7 @@ class State:
         
         return self.rule.rhs[self.rule_pos]
     
-    def shifted(self) -> State:
+    def shifted(self) -> State[T]:
         if self.rule_pos == len(self.rule):
            raise ValueError("Cannot shift a completed state")
         
@@ -34,29 +33,29 @@ class State:
 
 
 @dataclasses.dataclass(frozen=True)
-class Table:
-    states: typing.Set[State] = dataclasses.field(default_factory=set)
-    new_states: typing.Set[State] = dataclasses.field(default_factory=set)
+class Table(typing.Generic[T]):
+    states: typing.Set[State[T]] = dataclasses.field(default_factory=set)
+    new_states: typing.Set[State[T]] = dataclasses.field(default_factory=set)
     
     @staticmethod
-    def initial(start_rule: Rule) -> Table:
+    def initial(start_rule: Rule[T]) -> Table:
         return Table(new_states={State(start_rule)})
     
-    def add_state(self, state: State) -> None:
+    def add_state(self, state: State[T]) -> None:
         if state not in self.states:
             self.new_states.add(state)
     
     def has_new_states(self) -> bool:
         return bool(self.new_states)
     
-    def process_state(self) -> State:
+    def process_state(self) -> State[T]:
         state = self.new_states.pop()
         
         self.states.add(state)
         
         return state
     
-    def is_successful(self, start_rule: Rule) -> bool:
+    def is_successful(self, start_rule: Rule[T]) -> bool:
         return any(
             state.rule == start_rule and state.rule_pos == len(state.rule)
             for state in self.states
@@ -67,10 +66,10 @@ class Table:
 
 
 class EarleyParserConfig(typing.Generic[T]):
-    start_rule: Rule
-    rules_by_lhs: typing.Dict[Nonterminal, typing.List[Rule]]
+    start_rule: Rule[T]
+    rules_by_lhs: typing.Dict[Nonterminal, typing.List[Rule[T]]]
     
-    def __init__(self, grammar: Grammar):
+    def __init__(self, grammar: Grammar[T]):
         grammar = grammar.split_long_terminals()
         
         self.start_rule = only(grammar.get_rules_by_lhs(grammar.new_start))
@@ -78,7 +77,7 @@ class EarleyParserConfig(typing.Generic[T]):
         
         self._populate_rules_by_lhs(grammar)
     
-    def _populate_rules_by_lhs(self, grammar: Grammar):
+    def _populate_rules_by_lhs(self, grammar: Grammar[T]):
         for rule in grammar.rules:
             self.rules_by_lhs.setdefault(rule.lhs, []).append(rule)
 
@@ -86,7 +85,7 @@ class EarleyParserConfig(typing.Generic[T]):
 class EarleyParser(Parser[bool, T], typing.Generic[T]):
     _config: EarleyParserConfig[T]
     _source: typing.Iterable[T]
-    _tables: typing.List[Table]
+    _tables: typing.List[Table[T]]
     
     
     def __init__(self, config: EarleyParserConfig[T]):
@@ -122,11 +121,11 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
         del self._source
     
     @property
-    def _cur_table(self) -> Table:
+    def _cur_table(self) -> Table[T]:
         return self._tables[-2]
     
     @property
-    def _next_table(self) -> Table:
+    def _next_table(self) -> Table[T]:
         return self._tables[-1]
     
     @property
@@ -136,7 +135,7 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
     def _step(self, tok: T | None) -> None:
         self._tables.append(Table())
         
-        table: typing.Final[Table] = self._cur_table
+        table: typing.Final[Table[T]] = self._cur_table
         while table.has_new_states():
             state: State = table.process_state()
             
@@ -170,7 +169,19 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
             self._cur_table.add_state(prev_state.shifted())
 
 
+class EarleyParserAPI(ParserAPI[bool, T], typing.Generic[T]):
+    _config: EarleyParserConfig[T]
+    
+    def _initialize(self, grammar: Grammar[T], **kwargs):
+        self._config = EarleyParserConfig(grammar)
+    
+    def _get_parser(self) -> EarleyParser[T]:
+        return EarleyParser(self._config)
+    
+
+
 __all__ = [
     "EarleyParserConfig",
     "EarleyParser",
+    "EarleyParserAPI"
 ]

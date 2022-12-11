@@ -62,7 +62,7 @@ class StrTerminal(Terminal[str]):
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
-class Rule:
+class Rule(typing.Generic[T]):
     lhs: Nonterminal
     rhs: typing.Collection[BaseSymbol] = dataclasses.field(default_factory=tuple)
     
@@ -80,23 +80,28 @@ class Rule:
             if not symbol.isTerminal():
                 yield symbol
     
+    def get_terminals(self) -> typing.Generator[Terminal[T], None, None]:
+        for symbol in self.rhs:
+            if symbol.isTerminal():
+                yield symbol
+    
     def __repr__(self):
         return f"<{self.lhs} -> {' '.join(map(str, self.rhs))}>"
 
 
-class Grammar:
-    _rules: typing.Final[typing.Set[Rule]]
+class Grammar(typing.Generic[T]):
+    _rules: typing.Final[typing.Set[Rule[T]]]
     _nonterminals: typing.Final[typing.Dict[str, Nonterminal]]
     _start: typing.Final[str | Nonterminal]
     
-    def __init__(self, rules: typing.Iterable[Rule] = (), start: str | Nonterminal = "S"):
+    def __init__(self, rules: typing.Iterable[Rule[T]] = (), start: str | Nonterminal = "S"):
         self._rules = set(rules)
         self._nonterminals = {rule.lhs.name: rule.lhs for rule in self._rules}
         
         self._start = start
     
     @property
-    def rules(self) -> typing.Collection[Rule]:
+    def rules(self) -> typing.Collection[Rule[T]]:
         return self._rules
     
     @property
@@ -150,7 +155,7 @@ class Grammar:
         
         return nonterm
     
-    def add_rule(self, rule: Rule) -> None:
+    def add_rule(self, rule: Rule[T]) -> None:
         for nonterm in rule.get_nonterminals():
             self.ensure_nonterminal(nonterm)
         
@@ -159,7 +164,7 @@ class Grammar:
     def create_rule(self, lhs: str | Nonterminal, rhs: typing.Iterable[str | Nonterminal]) -> None:
         self.add_rule(Rule(lhs, tuple(rhs)))
     
-    def get_rules_by_lhs(self, lhs: Nonterminal) -> typing.Iterable[Rule]:
+    def get_rules_by_lhs(self, lhs: Nonterminal) -> typing.Iterable[Rule[T]]:
         return filter(lambda rule: rule.lhs == lhs, self._rules)
     
     def prune(self) -> None:
@@ -175,14 +180,16 @@ class Grammar:
         
         self._nonterminals -= used_nonterminals
     
-    def split_long_terminals(self) -> Grammar:
+    def split_long_terminals(self: Grammar[str]) -> Grammar[str]:
         """
         Creates a new grammar equivalent to this one, but having no terminals exactly 1 character long.
+        
+        Note: only affects StrTerminals.
         """
         
         # TODO: Perhaps do in-place instead?
         
-        new_grammar = Grammar(start=self.start)
+        new_grammar: Grammar[str] = Grammar(start=self.start)
         self.new_start  # Trigger it here just to make sure it's already created
         
         for rule in self.rules:

@@ -7,51 +7,36 @@ from parsers_lib.all import *
 
 
 class EarleyParserTest(unittest.TestCase):
-    cfg_brackets: typing.ClassVar[EarleyParserConfig[StrTerminal]]
-    cfg_equal_ab: typing.ClassVar[EarleyParserConfig[StrTerminal]]
-    cfg_recursive: typing.ClassVar[EarleyParserConfig[StrTerminal]]
-    
-    parser_brackets: EarleyParser[StrTerminal]
-    parser_equal_ab: EarleyParser[StrTerminal]
-    parser_recursive: EarleyParser[StrTerminal]
+    parser_brackets: typing.ClassVar[EarleyParserAPI[StrTerminal]]
+    parser_equal_ab: typing.ClassVar[EarleyParserAPI[StrTerminal]]
+    parser_recursive: typing.ClassVar[EarleyParserAPI[StrTerminal]]
     
     
     @staticmethod
-    def build_parser_config(grammar: Grammar | str):
+    def build_parser(grammar: Grammar | str) -> EarleyParserAPI[StrTerminal]:
         if isinstance(grammar, str):
             grammar = metaparse_bnf_grammar(data=grammar)
         
-        return EarleyParserConfig(grammar=grammar)
+        return EarleyParserAPI(grammar)
     
     @classmethod
     def setUpClass(cls) -> None:
-        cls.cfg_brackets = cls.build_parser_config("""
+        cls.parser_brackets = cls.build_parser("""
             <start> ::= "(" <start> ")" | <start> <start> | "";
         """)
         
-        cls.cfg_equal_ab = cls.build_parser_config("""
+        cls.parser_equal_ab = cls.build_parser("""
             <start> ::= "a" <start> "b" <start> | "b" <start> "a" <start> | "";
         """)
         
-        cls.cfg_recursive = cls.build_parser_config("""
+        cls.parser_recursive = cls.build_parser("""
             <start> ::= <a> | "abc";
             <a> ::= <a>;
         """)
     
-    def setUp(self) -> None:
-        self.parser_brackets = EarleyParser(self.cfg_brackets)
-        self.parser_equal_ab = EarleyParser(self.cfg_equal_ab)
-        self.parser_recursive = EarleyParser(self.cfg_recursive)
-    
-    def tearDown(self) -> None:
-        del self.parser_brackets
-        del self.parser_equal_ab
-        del self.parser_recursive
-    
-    def check(self, parser: EarleyParser[StrTerminal], data: str, expected: bool) -> None:
+    def check(self, parser: EarleyParserAPI[StrTerminal], data: str, expected: bool) -> None:
         with self.subTest(data=data):
-            parser.feed(CharTokenizer(data))
-            actual = parser.parse()
+            actual = parser.parse(CharTokenizer(data))
             
             self.assertEqual(actual, expected)
     
