@@ -133,7 +133,7 @@ class VGkBuilder(typing.Generic[T]):
         
         return results
     
-    def _first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Generator[typing.Tuple[T, ...], ...]:
+    def _first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Generator[typing.Tuple[T, ...], None, None]:
         """
         Compute the first k tokens of the symbol sequence ending in the given continuation.
         """
