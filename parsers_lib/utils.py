@@ -1,7 +1,8 @@
 from __future__ import annotations
 import typing
 # import functools
-# import itertools
+import itertools
+import dataclasses
 
 
 T = typing.TypeVar("T")
@@ -54,8 +55,32 @@ def only(iterable: typing.Iterable[T]) -> T:
 #         raise NotImplementedError("Virtual mappings have no determined length")
 
 
+@dataclasses.dataclass(frozen=True)
+class UpdateableSet(typing.Generic[T]):
+    values: typing.Set[T] = dataclasses.field(default_factory=set)
+    new_values: typing.Set[T] = dataclasses.field(default_factory=set)
+    
+    def add(self, value: T) -> None:
+        if value not in self.values:
+            self.new_values.add(value)
+    
+    def has_new(self) -> bool:
+        return bool(self.new_values)
+    
+    def process(self) -> T:
+        state = self.new_values.pop()
+        
+        self.values.add(state)
+        
+        return state
+    
+    def __iter__(self) -> typing.Iterator[T]:
+        return itertools.chain(self.values, self.new_values)
+
+
 __all__ = [
     "only",
     # "compare_iterables",
     # "VirtualMapping",
+    "UpdateableSet",
 ]

@@ -30,7 +30,7 @@ class BNFMetaParserTest(unittest.TestCase):
                 Rule(Nonterminal("several-bs"), [StrTerminal("b")]),
                 Rule(Nonterminal("3-c"), [StrTerminal("c c b")]),
             }, start=Nonterminal("start")
-        ))
+        ).split_long_terminals())
     
     def test_comments(self) -> None:
         self.check("""
@@ -44,7 +44,7 @@ class BNFMetaParserTest(unittest.TestCase):
             rules={
                 Rule(Nonterminal("start"), [StrTerminal("aboba"), StrTerminal("abiba")]),
             }, start=Nonterminal("start")
-        ))
+        ).split_long_terminals())
     
     def test_terminals(self) -> None:
         self.check(r"""
@@ -56,14 +56,14 @@ class BNFMetaParserTest(unittest.TestCase):
                 Rule(Nonterminal("start"), [StrTerminal("\\\"\'\'c\n\r")]),
                 Rule(Nonterminal("start"), [StrTerminal("\\\"d\"\'\r\n")]),
             }, start=Nonterminal("start")
-        ))
+        ).split_long_terminals())
     
     def test_empty_rule(self) -> None:
         self.check("<start> ::= ;", Grammar(
             rules={
                 Rule(Nonterminal("start"), []),
             }, start=Nonterminal("start")
-        ))
+        ).split_long_terminals())
     
     def test_repetition(self) -> None:
         self.check("<start> ::= 'a' | 'b'; <start> ::= 'c';", Grammar(
@@ -72,7 +72,7 @@ class BNFMetaParserTest(unittest.TestCase):
                 Rule(Nonterminal("start"), [StrTerminal("b")]),
                 Rule(Nonterminal("start"), [StrTerminal("c")]),
             }, start=Nonterminal("start")
-        ))
+        ).split_long_terminals())
     
     def test_duplicates(self) -> None:
         self.check("<start> ::= 'a' | 'b'; <start> ::= 'a' | 'b';", Grammar(
@@ -80,7 +80,7 @@ class BNFMetaParserTest(unittest.TestCase):
                 Rule(Nonterminal("start"), [StrTerminal("a")]),
                 Rule(Nonterminal("start"), [StrTerminal("b")]),
             }, start=Nonterminal("start")
-        ))
+        ).split_long_terminals())
 
 
 if __name__ == "__main__":

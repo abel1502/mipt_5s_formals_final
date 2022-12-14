@@ -17,7 +17,7 @@ class BaseSymbol(abc.ABC):
     """
     
     @abc.abstractmethod
-    def isTerminal() -> bool:
+    def is_terminal() -> bool:
         ...
 
 
@@ -28,23 +28,25 @@ class Terminal(BaseSymbol, typing.Generic[T]):
     Provided for extensibility.
     """
     
-    def isTerminal(self) -> bool:
+    def is_terminal(self) -> bool:
         return True
     
     @abc.abstractmethod
-    def matches(self, token: T) -> bool:
+    def get_token(self) -> T:
         """
-        Returns whether the given token matches this terminal.
+        Returns the value of this terminal.
         """
-
         ...
+    
+    def matches(self, token: T) -> bool:
+        return self.value == token
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
 class Nonterminal(BaseSymbol):
     name: str
     
-    def isTerminal(self) -> bool:
+    def is_terminal(self) -> bool:
         return False
     
     def __repr__(self):
@@ -55,8 +57,8 @@ class Nonterminal(BaseSymbol):
 class StrTerminal(Terminal[str]):
     value: str
     
-    def matches(self, token: str) -> bool:
-        return self.value == token
+    def get_token(self) -> str:
+        return self.value
     
     def __repr__(self):
         return repr(self.value)
@@ -78,12 +80,12 @@ class Rule(typing.Generic[T]):
         yield self.lhs
         
         for symbol in self.rhs:
-            if not symbol.isTerminal():
+            if not symbol.is_terminal():
                 yield symbol
     
     def get_terminals(self) -> typing.Generator[Terminal[T], None, None]:
         for symbol in self.rhs:
-            if symbol.isTerminal():
+            if symbol.is_terminal():
                 yield symbol
     
     def __repr__(self):
@@ -181,14 +183,23 @@ class Grammar(typing.Generic[T]):
         
         self._nonterminals -= used_nonterminals
     
-    def get_all_terminals(self) -> typing.Iterable[Terminal[T]]:
-        """
-        Returns all unique terminals used in this grammar.
-        """
+    # def get_all_terminals(self) -> typing.Set[Terminal[T]]:
+    #     """
+    #     Returns all unique terminals used in this grammar.
+    #     """
         
-        return set(itertools.chain.from_iterable(
-            rule.get_terminals() for rule in self._rules
-        ))
+    #     return set(itertools.chain.from_iterable(
+    #         rule.get_terminals() for rule in self._rules
+    #     ))
+    
+    # def get_all_tokens(self) -> typing.Set[T]:
+    #     """
+    #     Returns all unique tokens used in this grammar.
+    #     """
+        
+    #     return set(
+    #         terminal.get_token() for terminal in self.get_all_terminals()
+    #     )
     
     def split_long_terminals(self: Grammar[str]) -> Grammar[str]:
         """
@@ -209,7 +220,7 @@ class Grammar(typing.Generic[T]):
             new_rhs = []
             
             for symbol in rule.rhs:
-                if not symbol.isTerminal():
+                if not symbol.is_terminal():
                     assert symbol != self.new_start
                     new_rhs.append(symbol)
                     continue

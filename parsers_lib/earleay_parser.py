@@ -32,37 +32,16 @@ class State(typing.Generic[T]):
         return dataclasses.replace(self, rule_pos=self.rule_pos + 1)
 
 
-@dataclasses.dataclass(frozen=True)
-class Table(typing.Generic[T]):
-    states: typing.Set[State[T]] = dataclasses.field(default_factory=set)
-    new_states: typing.Set[State[T]] = dataclasses.field(default_factory=set)
-    
+class Table(UpdateableSet[State[T]], typing.Generic[T]):
     @staticmethod
     def initial(start_rule: Rule[T]) -> Table:
-        return Table(new_states={State(start_rule)})
-    
-    def add_state(self, state: State[T]) -> None:
-        if state not in self.states:
-            self.new_states.add(state)
-    
-    def has_new_states(self) -> bool:
-        return bool(self.new_states)
-    
-    def process_state(self) -> State[T]:
-        state = self.new_states.pop()
-        
-        self.states.add(state)
-        
-        return state
+        return Table(new_values={State(start_rule)})
     
     def is_successful(self, start_rule: Rule[T]) -> bool:
         return any(
             state.rule == start_rule and state.rule_pos == len(state.rule)
-            for state in self.states
+            for state in self.values
         )
-    
-    def __iter__(self) -> typing.Iterator[State]:
-        return itertools.chain(self.states, self.new_states)
 
 
 class EarleyParserConfig(typing.Generic[T]):
@@ -134,14 +113,14 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
         self._tables.append(Table())
         
         table: typing.Final[Table[T]] = self._cur_table
-        while table.has_new_states():
-            state: State = table.process_state()
+        while table.has_new():
+            state: State = table.process()
             
             next_item: BaseSymbol | None = state.get_next_item()
             
             if next_item is None:
                 self._complete(state)
-            elif next_item.isTerminal():
+            elif next_item.is_terminal():
                 self._scan(state, next_item, tok)
             else:
                 self._predict(next_item)
@@ -151,11 +130,11 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
             return
         
         if terminal.matches(tok):
-            self._next_table.add_state(state.shifted())
+            self._next_table.add(state.shifted())
     
     def _predict(self, nonterminal: Nonterminal) -> None:
         for rule in self._config.rules_by_lhs[nonterminal]:
-            self._cur_table.add_state(State(rule, start_offset=self._cur_idx))
+            self._cur_table.add(State(rule, start_offset=self._cur_idx))
     
     def _complete(self, state: State) -> None:
         for prev_state in list(self._tables[state.start_offset]):
@@ -164,7 +143,7 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
             if next_item != state.rule.lhs:
                 continue
             
-            self._cur_table.add_state(prev_state.shifted())
+            self._cur_table.add(prev_state.shifted())
 
 
 class EarleyParserAPI(ParserAPI[bool, T], typing.Generic[T]):

@@ -1,12 +1,10 @@
 from __future__ import annotations
 import typing
 import itertools
-import abc
 import enum
 import dataclasses
 import numbers
 import io
-import string
 from functools import cached_property
 
 
@@ -27,8 +25,8 @@ class Token(grammar.Terminal["Token"]):  # Automatically an ABC, but has no abst
             raise TypeError("Token is an abstract class")
     
     # A common base implementation for our specific tokens
-    def matches(self, token: T) -> bool:
-        return self == token
+    def get_token(self) -> "Token":
+        return self
 
 
 @dataclasses.dataclass(frozen=True)
