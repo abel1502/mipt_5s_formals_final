@@ -110,12 +110,14 @@ class VGkBuilder(typing.Generic[T]):
                 continue
             
             next_item: Nonterminal
+        
+            # debug(">>", "querying", state.rule.rhs[state.rule_pos + 1:], state.continuation)
             
             continuations: typing.Collection[typing.Tuple[T, ...]] = list(
-                self.first_k(state.rule.rhs[state.rule_pos:], state.continuation)
+                self.first_k(state.rule.rhs[state.rule_pos + 1:], state.continuation)
             )
         
-            # debug(">>", "continuations", continuations)
+            # debug(">>>", "continuations", continuations)
             
             for rule in self._rules_by_lhs.get(next_item, ()):
                 for continuation in continuations:
@@ -224,13 +226,13 @@ class VGkBuilder(typing.Generic[T]):
         start_table: Table[T] = Table.initial(only(self._rules_by_lhs[self._grammar.new_start]))
         root: FrozenTable[T] = self._add_table(start_table)
         
-        # debug(">", root)
-        
         while self._tables.has_new():
             table: FrozenTable[T] = self._tables.process()
             
             for symbol, next_table in self._goto(table).items():
                 table.gotos[symbol] = self._add_table(next_table)
+        
+        # debug(">", root)
         
         return root, set(self._tables)
 

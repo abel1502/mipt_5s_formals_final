@@ -39,6 +39,7 @@ class ParserTestBase(unittest.TestCase, typing.Generic[P]):
                 "))((":   False,
             }
         ),
+        
         ParserTestInfo(
             "equal_ab",
             """ <start> ::= "a" <start> "b" <start> | "b" <start> "a" <start> | ""; """,
@@ -54,6 +55,7 @@ class ParserTestBase(unittest.TestCase, typing.Generic[P]):
                 "aabbb": False,
             }
         ),
+        
         ParserTestInfo(
             "recursive",
             """ <start> ::= <a> | "abc"; <a> ::= <a>; """,
