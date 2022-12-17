@@ -134,7 +134,6 @@ class VGkBuilder(typing.Generic[T]):
             if next_item is None:
                 continue
             
-            next_item: Terminal[T]
             results.setdefault(next_item, Table()).add(state.shifted())
         
         return results
@@ -310,8 +309,6 @@ class LRTablesBuilder(typing.Generic[T]):
                 ))
             
             transitions[state.continuation] = Transition.reduce(state.rule)
-        
-        return transitions
     
     def _state_for(self, vgk: FrozenTable[T]) -> LRState[T]:
         """
@@ -332,9 +329,11 @@ class LRTablesBuilder(typing.Generic[T]):
         
         for symbol, next_vgk in vgk.gotos.items():
             action = Action(self._process(next_vgk))
+            
             lr_state.actions[symbol] = action
             
             if symbol.is_terminal():
+                # A bit hacky, but whatever...
                 lr_state.actions[symbol.get_token()] = action
         
         return lr_state

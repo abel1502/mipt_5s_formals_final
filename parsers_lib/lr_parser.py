@@ -69,16 +69,22 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
     def _cur_state(self) -> LRState[T]:
         return self._stack[-1][1]
     
+    def _lookahead(self) -> typing.Tuple[T, ...]:
+        result: typing.List[T] = self._source.peek(self._config.k)
+        
+        while result and result[-1] == self._config.eof_token:
+            result.pop()
+        
+        return tuple(result)
+    
     def _parse(self) -> bool:
         # For faster access
-        k: typing.Final[int] = self._config.k
-        source: PeekableStream[T] = self._source
         stack: typing.List[typing.Tuple[BaseSymbol | T, LRState[T]]] = self._stack
         
         while stack:
             cur_state: LRState[T] = self._cur_state
             
-            preview: typing.Tuple[T, ...] = tuple(source.peek(k))
+            preview: typing.Tuple[T, ...] = self._lookahead()
             
             if preview not in cur_state.transitions:
                 return False
@@ -89,8 +95,7 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
                 return True
             
             if isinstance(transition, Transition.shift):
-                ch = source.next()
-                assert ch in cur_state.actions
+                ch = self._source.next()
                 stack.append((ch, cur_state.actions[ch].target))
                 continue
             
@@ -100,7 +105,8 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
             for i in range(len(rule)):
                 stack.pop()
             
-            stack.append((rule.lhs, cur_state.actions[rule.lhs].target))
+            old_state: LRState[T] = self._cur_state
+            stack.append((rule.lhs, old_state.actions[rule.lhs].target))
         
         assert False, "Shouldn't be reachable"
 

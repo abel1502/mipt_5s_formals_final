@@ -1,6 +1,7 @@
 from __future__ import annotations
 import typing
 import unittest
+import dataclasses
 
 import set_path
 from parsers_lib.all import *
@@ -9,13 +10,68 @@ from parsers_lib.all import *
 P = typing.TypeVar("P", bound=ParserAPI[bool, StrTerminal])
 
 
+@dataclasses.dataclass
+class ParserTestInfo(typing.Generic[P]):
+    name: str
+    grammar: str
+    tests: typing.Dict[str, bool]
+    parser: P | None = None
+
+
 class ParserTestBase(unittest.TestCase, typing.Generic[P]):
     ParserAPIType: typing.ClassVar[typing.Type[P]] = ParserAPI
     
-    parser_brackets: typing.ClassVar[ParserAPIType]
-    parser_equal_ab: typing.ClassVar[ParserAPIType]
-    parser_recursive: typing.ClassVar[ParserAPIType]
+    parsers: typing.ClassVar[typing.List[ParserTestInfo[P]]] = [
+        ParserTestInfo(
+            "brackets",
+            """ <start> ::= "(" <start> ")" | <start> <start> | ""; """,
+            {
+                "":       True,
+                "()":     True,
+                "()()":   True,
+                "((()))": True,
+                "(()":    False,
+                "())":    False,
+                "((())":  False,
+                "())(":   False,
+                ")(":     False,
+                ")()(":   False,
+                "))((":   False,
+            }
+        ),
+        ParserTestInfo(
+            "equal_ab",
+            """ <start> ::= "a" <start> "b" <start> | "b" <start> "a" <start> | ""; """,
+            {
+                "abab":  True,
+                "aabb":  True,
+                "bbaa":  True,
+                "ba":    True,
+                "":      True,
+                "a":     False,
+                "ababa": False,
+                "abbba": False,
+                "aabbb": False,
+            }
+        ),
+        ParserTestInfo(
+            "recursive",
+            """ <start> ::= <a> | "abc"; <a> ::= <a>; """,
+            {
+                "abc": True,
+                "a":   False,
+                "":    False,
+            }
+        ),
+    ]
     
+    @classmethod
+    def get_parser_info(cls, name: str) -> ParserTestInfo:
+        for info in cls.parsers:
+            if info.name == name:
+                return info
+        
+        raise KeyError(f"Parser {name!r} not found")
     
     @classmethod
     def build_parser(cls, grammar: Grammar | str) -> ParserAPIType:
@@ -24,22 +80,23 @@ class ParserTestBase(unittest.TestCase, typing.Generic[P]):
         
         return cls.ParserAPIType(grammar)
     
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        
+        for info in cls.parsers:
+            setattr(cls, f"test_{info.name}", lambda self, info=info: self.check_all(info))
+    
     @classmethod
     def setUpClass(cls) -> None:
         assert cls is not ParserTestBase, "ParserTestBase is an abstract base class, not a test case"
         
-        # cls.parser_brackets = cls.build_parser("""
-        #     <start> ::= "(" <start> ")" | <start> <start> | "";
-        # """)
-        
-        # cls.parser_equal_ab = cls.build_parser("""
-        #     <start> ::= "a" <start> "b" <start> | "b" <start> "a" <start> | "";
-        # """)
-        
-        cls.parser_recursive = cls.build_parser("""
-            <start> ::= <a> | "abc";
-            <a> ::= <a>;
-        """)
+        for info in cls.parsers:
+            info.parser = cls.build_parser(info.grammar)
+    
+    @classmethod
+    def tearDownClass(cls) -> None:
+        for info in cls.parsers:
+            info.parser = None
     
     def check(self, parser: ParserAPIType, data: str, expected: bool) -> None:
         with self.subTest(data=data):
@@ -47,34 +104,15 @@ class ParserTestBase(unittest.TestCase, typing.Generic[P]):
             
             self.assertEqual(actual, expected)
     
-    # def test_brackets(self) -> None:
-    #     self.check(self.parser_brackets, "", True)
-    #     self.check(self.parser_brackets, "()", True)
-    #     self.check(self.parser_brackets, "()()", True)
-    #     self.check(self.parser_brackets, "((()))", True)
-    #     self.check(self.parser_brackets, "(()", False)
-    #     self.check(self.parser_brackets, "())", False)
-    #     self.check(self.parser_brackets, "((())", False)
-    #     self.check(self.parser_brackets, "())(", False)
-    #     self.check(self.parser_brackets, ")(", False)
-    #     self.check(self.parser_brackets, ")()(", False)
-    #     self.check(self.parser_brackets, "))((", False)
-    
-    # def test_equal_ab(self) -> None:
-    #     self.check(self.parser_equal_ab, "abab", True)
-    #     self.check(self.parser_equal_ab, "aabb", True)
-    #     self.check(self.parser_equal_ab, "bbaa", True)
-    #     self.check(self.parser_equal_ab, "ba", True)
-    #     self.check(self.parser_equal_ab, "", True)
-    #     self.check(self.parser_equal_ab, "a", False)
-    #     self.check(self.parser_equal_ab, "ababa", False)
-    #     self.check(self.parser_equal_ab, "abbba", False)
-    #     self.check(self.parser_equal_ab, "aabbb", False)
-    
-    def test_recursive(self) -> None:
-        # This mostly just validates that the parser doesn't somehow loop infinitely.
-        self.check(self.parser_recursive, "abc", True)
-        self.check(self.parser_recursive, "", False)
+    def check_all(self, info: ParserTestInfo) -> None:
+        for data, expected in info.tests.items():
+            self.check(info.parser, data, expected)
+
+
+__all__ = [
+    "ParserTestInfo",
+    "ParserTestBase",
+]
 
 
 if __name__ == "__main__":

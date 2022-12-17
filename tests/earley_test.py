@@ -3,7 +3,7 @@ import typing
 import unittest
 
 import set_path
-from parser_test_base import ParserTestBase
+from parser_test_base import *
 from parsers_lib.all import *
 
 
