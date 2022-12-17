@@ -114,6 +114,8 @@ class VGkBuilder(typing.Generic[T]):
             continuations: typing.Collection[typing.Tuple[T, ...]] = list(
                 self.first_k(state.rule.rhs[state.rule_pos:], state.continuation)
             )
+        
+            # debug(">>", "continuations", continuations)
             
             for rule in self._rules_by_lhs.get(next_item, ()):
                 for continuation in continuations:
@@ -142,17 +144,18 @@ class VGkBuilder(typing.Generic[T]):
         Compute the first k tokens of the symbol sequence ending in the given continuation.
         """
         
-        results: typing.Set[typing.Tuple[T, ...]] = \
-            self._expand_sequence(tuple(rule_symbols))
+        # debug(">>", "first_k", rule_symbols, continuation)
         
-        for result in results:
+        for result in self._expand_sequence(rule_symbols):
             yield result + continuation[:self._k - len(result)]
     
     def _expand_sequence(self, rule_symbols: typing.Iterable[BaseSymbol]) -> typing.Set[typing.Tuple[T, ...]]:
         result: typing.Set[typing.Tuple[T, ...]] = set()
-        cur_result: typing.Set[typing.Tuple[T, ...]] = set()
+        cur_result: typing.Set[typing.Tuple[T, ...]] = {()}
         
         k: typing.Final[int] = self._k
+        
+        # debug(">>>", "expand_sequence", rule_symbols)
         
         for child_symbol in rule_symbols:
             cur_result = self._set_minkovsky_sum(
@@ -165,12 +168,18 @@ class VGkBuilder(typing.Generic[T]):
             result.update(r[:k] for r in long_results)
             cur_result.difference_update(long_results)
         
+        result.update(r[:k] for r in cur_result)
+        
+        # debug(">>>", "expand_sequence result", result)
+        
         return result
     
     def _expand_symbol(self, symbol: BaseSymbol) -> typing.Set[typing.Tuple[T, ...]]:
         """
         For each symbol, compute the set of all possible continuations of the symbol of length <=k.
         """
+        
+        # debug(">>>", "expand_symbol", symbol)
         
         if symbol not in self._symbol_expansion_cache:
             result: typing.Set[typing.Tuple[T, ...]] = self._do_expand_symbol(symbol, with_self=False)
@@ -183,6 +192,8 @@ class VGkBuilder(typing.Generic[T]):
                 
                 if len(result) == old_len:
                     break
+        
+        # debug(">>>", "expand_symbol result", self._symbol_expansion_cache[symbol])
         
         return self._symbol_expansion_cache[symbol]
     
@@ -213,6 +224,8 @@ class VGkBuilder(typing.Generic[T]):
     def build(self) -> typing.Tuple[FrozenTable[T], typing.Set[FrozenTable[T]]]:
         start_table: Table[T] = Table.initial(only(self._rules_by_lhs[self._grammar.new_start]))
         root: FrozenTable[T] = self._add_table(start_table)
+        
+        # debug(">", root)
         
         while self._tables.has_new():
             table: FrozenTable[T] = self._tables.process()
@@ -245,7 +258,7 @@ class Action(typing.Generic[T]):
 @dataclasses.dataclass()
 class LRState(typing.Generic[T]):
     transitions: typing.Dict[typing.Tuple[T, ...], Transition[T]] = dataclasses.field(default_factory=dict)
-    actions: typing.Dict[BaseSymbol, Action[T]] = dataclasses.field(default_factory=dict)
+    actions: typing.Dict[BaseSymbol | T, Action[T]] = dataclasses.field(default_factory=dict)
 
 
 class LRTablesBuilder(typing.Generic[T]):
@@ -318,7 +331,13 @@ class LRTablesBuilder(typing.Generic[T]):
         lr_state = self._state_for(vgk)
         
         for symbol, next_vgk in vgk.gotos.items():
-            lr_state.actions[symbol] = Action(self._process(next_vgk))
+            action = Action(self._process(next_vgk))
+            lr_state.actions[symbol] = action
+            
+            if symbol.is_terminal():
+                lr_state.actions[symbol.get_token()] = action
+        
+        return lr_state
     
     def build(self) -> LRState:
         return self._process(self._vgk_builder.build()[0])

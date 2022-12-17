@@ -23,7 +23,7 @@ class PeekableStream(typing.Generic[T]):
     _pos: int
     
     def __init__(self, source: typing.Iterable[T], limit: int, sentinel: T):
-        self._source = source
+        self._source = iter(source)
         self._limit = limit
         self._peeked = deque()
         self._sentinel = sentinel

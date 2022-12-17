@@ -78,9 +78,22 @@ class UpdateableSet(typing.Generic[T]):
         return itertools.chain(self.values, self.new_values)
 
 
+def debug(*args) -> None:
+    """
+    A convenience function to encapsulate debug printing.
+    
+    Disabling is currently done by inserting a short-circuit `return` :)
+    """
+    
+    # return
+    
+    print(*args, flush=True)
+
+
 __all__ = [
     "only",
     # "compare_iterables",
     # "VirtualMapping",
     "UpdateableSet",
+    "debug",
 ]

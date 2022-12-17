@@ -78,7 +78,7 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
         while stack:
             cur_state: LRState[T] = self._cur_state
             
-            preview: typing.List[T] = source.peek(k)
+            preview: typing.Tuple[T, ...] = tuple(source.peek(k))
             
             if preview not in cur_state.transitions:
                 return False
@@ -88,11 +88,10 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
             if isinstance(transition, Transition.accept):
                 return True
             
-            new_state: LRState[T] = cur_state.actions[transition.symbol]
-            
             if isinstance(transition, Transition.shift):
-                stack.append((source.peek1(), new_state))
-                source.next()
+                ch = source.next()
+                assert ch in cur_state.actions
+                stack.append((ch, cur_state.actions[ch].target))
                 continue
             
             assert isinstance(transition, Transition.reduce)
@@ -101,7 +100,7 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
             for i in range(len(rule)):
                 stack.pop()
             
-            stack.append((rule.lhs, self._cur_state.actions[rule.lhs]))
+            stack.append((rule.lhs, cur_state.actions[rule.lhs].target))
         
         assert False, "Shouldn't be reachable"
 
@@ -111,6 +110,9 @@ class LRParserAPI(ParserAPI[bool, T], typing.Generic[T]):
     
     def __init__(self, grammar: Grammar[T], eof_token: T, k: int = 1):
         self._config = LRParserConfig(grammar, eof_token, k)
+        
+        # debug(grammar)
+        # debug(self._config.root_table)
     
     def _get_parser(self) -> LRParser[T]:
         return LRParser(self._config)
