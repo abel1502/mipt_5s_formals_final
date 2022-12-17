@@ -8,10 +8,11 @@ import os
 from .basic_tokenizer import *
 from .peekable_stream import PeekableStream
 from .grammar import *
-from .errors import ParseError
+from .errors import *
 from .abstract_parser import Parser
 
 
+# TODO: Add ParserAPI?
 class BNFMetaParser(Parser[Grammar, Token]):
     class _Punct(enum.Enum):
         RULE_DEF = "::="

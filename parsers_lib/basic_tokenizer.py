@@ -10,7 +10,7 @@ from functools import cached_property
 
 from . import grammar
 from .peekable_stream import PeekableTextIO
-from .errors import ParseError
+from .errors import *
 from .abstract_tokenizer import *
 
 

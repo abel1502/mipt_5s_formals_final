@@ -5,7 +5,7 @@ import itertools
 
 
 from .grammar import *
-from .errors import ParseError
+from .errors import *
 from .abstract_parser import *
 from .utils import *
 
