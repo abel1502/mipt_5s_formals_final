@@ -143,11 +143,11 @@ class PeekableTextIO(PeekableStream[str]):
     def __init__(self, source: io.TextIOBase, limit: int, sentinel: str = ''):
         super().__init__(self._iter_from_io(source), limit, sentinel)
 
-    def peek(self, cnt: int) -> str:
-        return ''.join(super().peek(cnt))
+    def peek_str(self, cnt: int) -> str:
+        return ''.join(self.peek(cnt))
 
-    def peek1(self) -> str:
-        return self.peek(1)
+    def peek_ch(self) -> str:
+        return self.peek1()
 
 
 __all__ = [

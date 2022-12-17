@@ -9,3 +9,7 @@ class ParseError(Exception):
     
     pass
 
+
+__all__ = [
+    "ParseError",
+]
