@@ -51,7 +51,10 @@ def tagged_union(cls: typing.Type) -> typing.Type:
         
         ns: typing.Dict[str, typing.Any] = {}
         
-        if value is Unit:
+        # This highlights the need for a proper type annotation processing api in the standard library.
+        # For now I'll leave it like this, but it could theoretically fail if the user has their own
+        # type named "Unit"
+        if value is Unit or value == "Unit":
             ns["value"] = property(lambda self: None)
         else:
             ns["__annotations__"] = dict(value=value)

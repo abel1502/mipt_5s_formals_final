@@ -33,16 +33,12 @@ class ParserAPI(abc.ABC, typing.Generic[R, T]):
     A class that provides a simple interface to a parser.
     """
     
-    def __init__(self, grammar: Grammar[T], **kwargs):
-        self._initialize(grammar, **kwargs)
-    
     @abc.abstractmethod
-    def _initialize(self, grammar: Grammar[T], **kwargs):
+    def __init__(self, grammar: Grammar[T], *args, **kwargs):
         """
         Override this method with the initialization code for the parser.
         The simplest example would be just saving the grammar.
         """
-        ...
     
     @abc.abstractmethod
     def _get_parser(self, **kwargs) -> Parser[R, T]:

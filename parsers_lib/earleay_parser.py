@@ -149,7 +149,7 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
 class EarleyParserAPI(ParserAPI[bool, T], typing.Generic[T]):
     _config: EarleyParserConfig[T]
     
-    def _initialize(self, grammar: Grammar[T]):
+    def __init__(self, grammar: Grammar[T]):
         self._config = EarleyParserConfig(grammar)
     
     def _get_parser(self) -> EarleyParser[T]:
