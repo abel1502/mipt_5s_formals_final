@@ -8,19 +8,10 @@ from .grammar import *
 from .errors import ParseError
 from .abstract_parser import *
 from .utils import *
-from .tagged_union import *
 from ._lr_parser_helpers import *
 
 
 T = typing.TypeVar("T", bound=Terminal)
-
-
-# This is probably overkill, but I at least like the way it has turned out.
-@tagged_union
-class Transition(typing.Generic[T]):
-    shift: Unit
-    reduce: Rule[T]
-    accept: Unit
 
 
 # Could actually introduce a separate builder, but screw it
@@ -28,13 +19,12 @@ class LRParserConfig(typing.Generic[T]):
     eof_token: T
     k: int
     transitions: typing.Dict[int, typing.Dict[T, Transition[T]]]
-    actions: typing.Dict[int, typing.Dict[T, Transition[T]]]
+    actions: typing.Dict[int, typing.Dict[T, Action[T]]]
     
     def __init__(self, grammar: Grammar[T], eof_token: T, k: int = 1):
         self.eof_token = eof_token
         self.k = k
         
-        all_terms: typing.Set[T] = grammar.get_all_terminals()
         
         raise NotImplementedError()
 

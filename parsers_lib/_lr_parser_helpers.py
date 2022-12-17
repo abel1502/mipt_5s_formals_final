@@ -8,11 +8,14 @@ from functools import cached_property
 
 from .grammar import *
 from .utils import *
+from .errors import *
+from .tagged_union import *
 
 
 T = typing.TypeVar("T", bound=Terminal)
 
 
+# TODO: Confusing names, maybe rename
 @dataclasses.dataclass(frozen=True)
 class State(typing.Generic[T]):
     rule: Rule[T]
@@ -37,16 +40,16 @@ class Table(UpdateableSet[State[T]], typing.Generic[T]):
     def initial(start_rule: Rule[T]) -> Table:
         return Table(new_states={State(start_rule)})
     
-    def freeze(self, key: typing.Tuple[T, ...]) -> FrozenTable[T]:
+    def freeze(self) -> FrozenTable[T]:
         assert not self.has_new(), "Table not yet complete"
         
-        return FrozenTable(self, key)
+        return FrozenTable(self)
 
 
 @dataclasses.dataclass(frozen=True)
 class FrozenTable(typing.Generic[T]):
     values: typing.FrozenSet[State[T]]
-    key: typing.Tuple[T, ...] = dataclasses.field(hash=False, compare=False)
+    gotos: typing.Dict[BaseSymbol, FrozenTable[T]] = dataclasses.field(hash=False, compare=False, default_factory=dict)
 
 
 class VGkBuilder(typing.Generic[T]):
@@ -67,8 +70,6 @@ class VGkBuilder(typing.Generic[T]):
         self._rules_by_lhs  # Trigger generation
         
         self._tables = UpdateableSet()
-        
-        self._first_k_cache = {}
     
     @cached_property
     def _rules_by_lhs(self) -> typing.Dict[Nonterminal, typing.List[Rule[T]]]:
@@ -79,19 +80,19 @@ class VGkBuilder(typing.Generic[T]):
         
         return result
     
-    def _add_table(self, key: typing.Tuple[T, ...], table: Table[T]) -> None:
+    def _add_table(self, table: Table[T]) -> FrozenTable[T]:
         """
         Add the closure of the given table to the registry, if it hasn't been seen yet
         """
         
-        assert key not in self._tables
-        
         self._complete_table(table)
         
-        frozen_table: FrozenTable[T] = table.freeze(key)
+        frozen_table: FrozenTable[T] = table.freeze()
         
         if frozen_table not in self._tables:
             self._tables.add(frozen_table)
+        
+        return frozen_table
     
     def _complete_table(self, table: Table[T]) -> None:
         """
@@ -115,25 +116,25 @@ class VGkBuilder(typing.Generic[T]):
                 for continuation in continuations:
                     table.add(State(rule, continuation=continuation))
 
-    def _goto(self, table: FrozenTable[T]) -> typing.Mapping[T, Table[T]]:
+    def _goto(self, table: FrozenTable[T]) -> typing.Mapping[BaseSymbol, Table[T]]:
         """
         Apply the goto operation to the given table, and return the result.
         """
         
-        results: typing.Dict[T, Table[T]] = {}
+        results: typing.Dict[BaseSymbol, Table[T]] = {}
         
         for state in table.values:
             next_item: BaseSymbol | None = state.get_next_item()
             
-            if next_item is None or not next_item.is_terminal():
+            if next_item is None:
                 continue
             
             next_item: Terminal[T]
-            results.setdefault(next_item.get_token(), Table()).add(state.shifted())
+            results.setdefault(next_item, Table()).add(state.shifted())
         
         return results
     
-    def _first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Generator[typing.Tuple[T, ...], None, None]:
+    def first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Generator[typing.Tuple[T, ...], None, None]:
         """
         Compute the first k tokens of the symbol sequence ending in the given continuation.
         """
@@ -190,19 +191,129 @@ class VGkBuilder(typing.Generic[T]):
         
         return set(a + b for a, b in itertools.product(set_a, set_b))
     
-    def build(self) -> typing.Collection[FrozenTable[T]]:
+    def build(self) -> typing.Tuple[FrozenTable[T], typing.Set[FrozenTable[T]]]:
         start_table: Table[T] = Table.initial(only(self._rules_by_lhs[self._grammar.new_start]))
-        self._add_table((), start_table)
+        root: FrozenTable[T] = self._add_table((), start_table)
         
         while self._tables.has_new():
             table: FrozenTable[T] = self._tables.process()
             
-            for token, next_table in self._goto(table).items():
-                self._add_table(table.key + (token,), next_table)
+            for symbol, next_table in self._goto(table).items():
+                table.gotos[symbol] = self._add_table(next_table)
         
-        return set(self._tables)
+        return root, set(self._tables)
+
+
+# TODO: Constructors and error info...?
+# TODO: Separate classes for shift-reduce and reduce-reduce conflicts?
+class LRConflict(ParseError):
+    pass
+
+
+# This is probably overkill, but I at least like the way it has turned out.
+@tagged_union
+class Transition(typing.Generic[T]):
+    shift: Unit
+    reduce: Rule[T]
+    accept: Unit
+
+
+@dataclasses.dataclass(frozen=True)
+class Action(typing.Generic[T]):
+    target: LRState[T]
+
+
+@dataclasses.dataclass()
+class LRState(typing.Generic[T]):
+    transitions: typing.Dict[typing.Tuple[T, ...], Transition[T]] = dataclasses.field(default_factory=dict)
+    actions: typing.Dict[BaseSymbol, Action[T]] = dataclasses.field(default_factory=dict)
+
+
+class LRTablesBuilder(typing.Generic[T]):
+    _vgk_builder: VGkBuilder[T]
+    _states: typing.Dict[FrozenTable[T], LRState[T]]
+    
+    def __init__(self, grammar: Grammar[T], k: int) -> None:
+        self._vgk_builder = VGkBuilder(grammar, k)
+        self._states = {}
+    
+    def _build_transitions(self, lr_state: LRState[T], vgk: FrozenTable[T]) -> None:
+        transitions: typing.Dict[typing.Tuple[T, ...], Transition[T]] = lr_state.transitions
+        assert not transitions, "Transitions already built"
+        
+        start_nonterm: Nonterminal[T] = self._vgk_builder._grammar.new_start
+        
+        for state in vgk.values:
+            # Shift
+            if state.rule_pos < len(state.rule):
+                next_item: BaseSymbol = state.rule[state.rule_pos]
+                
+                if not next_item.is_terminal():
+                    continue
+                
+                valid_continuations = self._vgk_builder.first_k(
+                    state.rule.rhs[state.rule_pos:], state.continuation
+                )
+                
+                for continuation in valid_continuations:
+                    if continuation in transitions and not isinstance(transitions[continuation], Transition.shift):
+                        raise LRConflict("Shift-reduce conflict")
+                    
+                    transitions[continuation] = Transition.shift()
+
+                continue
+            
+            # Accept
+            if state.rule.lhs == start_nonterm and not state.continuation:
+                assert state.continuation not in transitions, "Accept conflicts should be impossible"
+                
+                transitions[state.continuation] = Transition.accept()
+
+                continue
+            
+            # Reduce
+            if state.continuation in transitions:
+                raise LRConflict("{}-reduce conflict".format(
+                    "Shift" if isinstance(transitions[state.continuation], Transition.shift) else "Reduce"
+                ))
+            
+            transitions[state.continuation] = Transition.reduce(state.rule)
+        
+        return transitions
+    
+    def _state_for(self, vgk: FrozenTable[T]) -> LRState[T]:
+        """
+        Returns the state corresponding to a V_G^k. If the state does not exist, it is created.
+        """
+        
+        if vgk not in self._states:
+            lr_state = LRState()
+            
+            self._build_transitions(lr_state, vgk)
+            
+            self._states[vgk] = lr_state
+        
+        return self._states[vgk]
+    
+    def _process(self, vgk: FrozenTable[T]) -> LRState[T]:
+        lr_state = self._state_for(vgk)
+        
+        for symbol, next_vgk in vgk.gotos.items():
+            lr_state.actions[symbol] = Action(self._process(next_vgk))
+    
+    def build(self) -> typing.List[LRState]:
+        self._process()
+        
+        return list(self._states.values())
+
 
 __all__ = [
-    "State",
-    "VGkBuilder",
+    # "State",
+    # "Table",
+    # "FrozenTable",
+    # "VGkBuilder",
+    "Transition",
+    "Action",
+    "LRState",
+    "LRTablesBuilder",
 ]
