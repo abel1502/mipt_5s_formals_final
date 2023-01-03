@@ -5,6 +5,7 @@ import unittest
 import set_path
 from parser_test_base import *
 from parsers_lib.all import *
+import parsers_lib._lr_parser_helpers as lr_parser_helpers
 
 
 # All the common grammars are LR(1). For LR(k), separate tests are needed...
@@ -84,7 +85,53 @@ class LR2ParserTest(LR1ParserTest):
             }
         ),
     ]
+
+
+class FirstKTest(unittest.TestCase):
+    K: typing.Final[int] = 2
+    GRAMMAR_DEF: typing.ClassVar[str] = """ <start> ::= <start> "a" <start> "b"; <start> ::= ''; """
     
+    grammar: typing.ClassVar[Grammar]
+    vgk_builder = lr_parser_helpers.VGkBuilder
+    
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.grammar = metaparse_bnf_grammar(data=cls.GRAMMAR_DEF)
+    
+    @classmethod
+    def tearDownClass(cls) -> None:
+        del cls.grammar
+    
+    def setUp(self) -> None:
+        self.vgk_builder = lr_parser_helpers.VGkBuilder(self.grammar, self.K)
+    
+    def tearDown(self) -> None:
+        del self.vgk_builder
+    
+    def check_first_k(self,
+                      rule_symbols: typing.Sequence[BaseSymbol],
+                      continuation: str,
+                      expected: typing.Set[str],
+                      debug: bool = False):
+        with self.subTest(rule_symbols=rule_symbols, continuation=continuation):
+            continuation: typing.Tuple[str, ...] = tuple(continuation)
+            expected: typing.Set[typing.Tuple[str, ...]] = {tuple(x) for x in expected}
+            
+            assert len(continuation) <= self.K, f"The test is conducted for k = {self.K}"
+            
+            actual: typing.Set[typing.Tuple[str, ...]] = set(self.vgk_builder.first_k(rule_symbols, continuation))
+            
+            if debug:
+                print(">>>", actual, flush=True)
+                return
+            
+            self.assertEqual(actual, expected)
+    
+    def test_first_k(self) -> None:
+        self.check_first_k([], "", {""})
+        self.check_first_k([Nonterminal("start")], "", {"", "aa", "ab"})
+        self.check_first_k([Nonterminal("start")], "a", {"a", "aa", "ab"})
+        self.check_first_k([Nonterminal("start"), StrTerminal("b"), Nonterminal("start")], "", {"b", "aa", "ab", "ba"})
 
 
 del ParserTestBase  # Otherwise it will be run as a test case
