@@ -32,6 +32,18 @@ class LR1ParserTest(ParserTestBase[LRParserAPI[StrTerminal]]):
         
         # Also has a shift-reduce conflict
         # ParserTestBase.get_parser_info("brackets"),
+        
+        # Indirect recursion trap, but also R-R conflict
+        # ParserTestInfo(
+        #     "indirect_recursion",
+        #     """ <start> ::= <A>; <A> ::= <B>; <B> ::= <A> | "a"; """,
+        #     {
+        #         "a":  True,
+        #         "b":  False,
+        #         "aa": False,
+        #         "":   False,
+        #     }
+        # ),
     ]
     
     @classmethod
