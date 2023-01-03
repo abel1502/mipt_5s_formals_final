@@ -183,13 +183,13 @@ class VGkBuilder(typing.Generic[T]):
         # debug(">>>", "expand_symbol", symbol)
         
         if symbol not in self._symbol_expansion_cache:
-            result: typing.Set[typing.Tuple[T, ...]] = self._do_expand_symbol(symbol, with_self=False)
+            result: typing.Set[typing.Tuple[T, ...]] = set()
             self._symbol_expansion_cache[symbol] = result
             
             while True:
                 old_len = len(result)
                 
-                result.update(self._do_expand_symbol(symbol, with_self=True))
+                result.update(self._do_expand_symbol(symbol))
                 
                 if len(result) == old_len:
                     break
@@ -198,7 +198,7 @@ class VGkBuilder(typing.Generic[T]):
         
         return self._symbol_expansion_cache[symbol]
     
-    def _do_expand_symbol(self, symbol: BaseSymbol, with_self: bool = False) -> typing.Set[typing.Tuple[T, ...]]:
+    def _do_expand_symbol(self, symbol: BaseSymbol) -> typing.Set[typing.Tuple[T, ...]]:
         if symbol.is_terminal():
             symbol: Terminal[T]
             
@@ -207,9 +207,6 @@ class VGkBuilder(typing.Generic[T]):
         result: typing.Set[typing.Tuple[T, ...]] = set()
         
         for rule in self._rules_by_lhs.get(symbol, ()):
-            if not with_self and symbol in rule.rhs:
-                continue
-            
             result.update(self._expand_sequence(rule.rhs))
         
         return result
