@@ -42,7 +42,7 @@ class LR1ParserTest(ParserTestBase[LRParserAPI[StrTerminal]]):
         return cls.ParserAPIType(grammar, "", 1)
 
 
-class LR3ParserTest(LR1ParserTest):
+class LR2ParserTest(LR1ParserTest):
     # Can't think of any unique test cases, but at least this does verify that LR(3) also works on LR(1) grammars...
     
     @classmethod
@@ -50,7 +50,28 @@ class LR3ParserTest(LR1ParserTest):
         if isinstance(grammar, str):
             grammar = metaparse_bnf_grammar(data=grammar)
         
-        return cls.ParserAPIType(grammar, "", 3)
+        return cls.ParserAPIType(grammar, "", 2)
+    
+    parsers: typing.ClassVar[typing.List[ParserTestInfo]] = LR1ParserTest.parsers + [
+        # LR(2), but not LR(1)
+        ParserTestInfo(
+            "seminar",
+            """
+                <start> ::= <A> <B>;
+                <A> ::= "a";
+                <B> ::= <C> <D> | "a" <E>;
+                <C> ::= "ab";
+                <D> ::= "bb";
+                <E> ::= "bba";
+            """,
+            {
+                "aabbb": True,
+                "aabba": True,
+                "babba": False,
+                "a":     False,
+            }
+        ),
+    ]
     
 
 
