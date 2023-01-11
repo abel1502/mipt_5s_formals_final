@@ -116,7 +116,7 @@ class FirstKTest(unittest.TestCase):
     GRAMMAR_DEF: typing.ClassVar[str] = """ <start> ::= <start> "a" <start> "b"; <start> ::= ''; """
     
     grammar: typing.ClassVar[Grammar]
-    vgk_builder = lr_parser_helpers.VGkBuilder
+    first_k_provider: lr_parser_helpers.FirstKProvider
     
     @classmethod
     def setUpClass(cls) -> None:
@@ -127,10 +127,10 @@ class FirstKTest(unittest.TestCase):
         del cls.grammar
     
     def setUp(self) -> None:
-        self.vgk_builder = lr_parser_helpers.VGkBuilder(self.grammar, self.K)
+        self.first_k_provider = lr_parser_helpers.FirstKProvider(self.grammar, self.K)
     
     def tearDown(self) -> None:
-        del self.vgk_builder
+        del self.first_k_provider
     
     def check_first_k(self,
                       rule_symbols: typing.Sequence[BaseSymbol],
@@ -143,7 +143,7 @@ class FirstKTest(unittest.TestCase):
             
             assert len(continuation) <= self.K, f"The test is conducted for k = {self.K}"
             
-            actual: typing.Set[typing.Tuple[str, ...]] = set(self.vgk_builder.first_k(rule_symbols, continuation))
+            actual: typing.Set[typing.Tuple[str, ...]] = set(self.first_k_provider.first_k(rule_symbols, continuation))
             
             if debug:
                 print(">>>", actual, flush=True)

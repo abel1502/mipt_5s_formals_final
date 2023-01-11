@@ -4,6 +4,7 @@ import dataclasses
 import itertools
 import functools
 from functools import cached_property
+from contextlib import contextmanager
 
 
 from .grammar import *
@@ -52,14 +53,9 @@ class FrozenTable(typing.Generic[T]):
     gotos: typing.Dict[BaseSymbol, FrozenTable[T]] = dataclasses.field(hash=False, compare=False, default_factory=dict)
 
 
-class VGkBuilder(typing.Generic[T]):
-    """
-    A helper class to build $V_G^k$
-    """
-    
+class FirstKProvider(typing.Generic[T]):
     _grammar: typing.Final[Grammar[T]]
     _k: typing.Final[int]
-    _tables: UpdateableSet[FrozenTable[T]]
     _symbol_expansion_cache: typing.Dict[BaseSymbol, typing.Set[typing.Tuple[T, ...]]]
     
     def __init__(self, grammar: Grammar[T], k: int):
@@ -68,20 +64,128 @@ class VGkBuilder(typing.Generic[T]):
         self._grammar = grammar
         self._k = k
         
-        self._rules_by_lhs  # Trigger generation
-        
-        self._tables = UpdateableSet()
+        self.rules_by_lhs  # Trigger generation
         
         self._symbol_expansion_cache = {}
+        
+        self._prepare()
     
     @cached_property
-    def _rules_by_lhs(self) -> typing.Dict[Nonterminal, typing.List[Rule[T]]]:
+    def rules_by_lhs(self) -> typing.Dict[Nonterminal, typing.List[Rule[T]]]:
         result: typing.Dict[Nonterminal, typing.List[Rule[T]]] = {}
         
         for rule in self._grammar.rules:
             result.setdefault(rule.lhs, []).append(rule)
         
         return result
+    
+    @property
+    def new_start(self) -> Nonterminal[T]:
+        return self._grammar.new_start
+    
+    @property
+    def new_start_rule(self) -> Rule[T]:
+        return only(self.rules_by_lhs[self.new_start])
+    
+    @staticmethod
+    def _set_minkovsky_sum(set_a: typing.Set[T], set_b: typing.Set[T]) -> typing.Set[T]:
+        """
+        Compute the Minkovsky sum of the two sets.
+        """
+        
+        return set(a + b for a, b in itertools.product(set_a, set_b))
+    
+    @cached_property
+    def _sufficient_repetitions(self) -> int:
+        return self._k * len(self._grammar.rules)
+    
+    def _prepare(self) -> None:
+        nonterminals = list(self._grammar.nonterminals.values())
+        
+        for _ in range(self._sufficient_repetitions):
+            for symbol in nonterminals:
+                self._expand_symbol(symbol, explicit=True)
+    
+    def _expand_sequence(self, rule_symbols: typing.Iterable[BaseSymbol]) -> typing.Set[typing.Tuple[T, ...]]:
+        result: typing.Set[typing.Tuple[T, ...]] = set()
+        cur_result: typing.Set[typing.Tuple[T, ...]] = {()}
+        
+        k = self._k
+        
+        # debug(">>>", "expand_sequence", rule_symbols)
+        
+        for child_symbol in rule_symbols:
+            cur_result = self._set_minkovsky_sum(cur_result, self._expand_symbol(child_symbol))
+            
+            long_results = set(r for r in cur_result if len(r) >= k)
+            
+            result.update(r[:k] for r in long_results)
+            cur_result.difference_update(long_results)
+        
+        result.update(r[:k] for r in cur_result)
+        
+        # debug(">>>", "expand_sequence result", result)
+        
+        return result
+    
+    def _expand_symbol(self, symbol: BaseSymbol, explicit: bool = False) -> typing.Set[typing.Tuple[T, ...]]:
+        """
+        For each symbol, compute the set of all possible continuations of the symbol of length <=k.
+        """
+        
+        # debug(">>>", f"expand_symbol({symbol})")
+        
+        if symbol not in self._symbol_expansion_cache or explicit:
+            result: typing.Set[typing.Tuple[T, ...]] = \
+                self._symbol_expansion_cache.setdefault(symbol, set())
+            
+            for _ in range(self._sufficient_repetitions):
+                result.update(self._do_expand_symbol(symbol))
+        
+            # debug(">>>", f"expand_symbol({symbol}) result", result)
+        
+        return self._symbol_expansion_cache[symbol]
+    
+    def _do_expand_symbol(self, symbol: BaseSymbol) -> typing.Set[typing.Tuple[T, ...]]:
+        if symbol.is_terminal():
+            symbol: Terminal[T]
+            
+            return {(symbol.get_token(),)}
+        
+        result: typing.Set[typing.Tuple[T, ...]] = set()
+        
+        for rule in self.rules_by_lhs.get(symbol, ()):
+            result.update(self._expand_sequence(rule.rhs))
+        
+        return result
+
+    def first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Set[typing.Tuple[T, ...]]:
+        """
+        Compute the first k tokens of the symbol sequence ending in the given continuation.
+        """
+        
+        # debug(">>", "first_k", rule_symbols, continuation)
+        
+        result = self._expand_sequence(rule_symbols)
+        
+        k = self._k
+        result = set(r + continuation[:k - len(r)] for r in result)
+        
+        return result
+
+
+class VGkBuilder(typing.Generic[T]):
+    """
+    A helper class to build $V_G^k$
+    """
+    
+    _first_k_provider: FirstKProvider[T]
+    _tables: UpdateableSet[FrozenTable[T]]
+    
+    def __init__(self, grammar: Grammar[T], k: int):
+        self._first_k_provider = FirstKProvider(grammar, k)
+        
+        self._tables = UpdateableSet()
     
     def _add_table(self, table: Table[T]) -> FrozenTable[T]:
         """
@@ -114,7 +218,7 @@ class VGkBuilder(typing.Generic[T]):
             # debug(">>", "querying", state.rule.rhs[state.rule_pos + 1:], state.continuation)
             
             continuations: typing.Collection[typing.Tuple[T, ...]] = list(
-                self.first_k(state.rule.rhs[state.rule_pos + 1:], state.continuation)
+                self._first_k(state.rule.rhs[state.rule_pos + 1:], state.continuation)
             )
         
             # debug(">>>", "continuations", continuations)
@@ -140,87 +244,15 @@ class VGkBuilder(typing.Generic[T]):
         
         return results
     
-    def first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Generator[typing.Tuple[T, ...], None, None]:
-        """
-        Compute the first k tokens of the symbol sequence ending in the given continuation.
-        """
-        
-        # debug(">>", "first_k", rule_symbols, continuation)
-        
-        for result in self._expand_sequence(rule_symbols):
-            yield result + continuation[:self._k - len(result)]
+    def _first_k(self, rule_symbols: typing.Sequence[BaseSymbol], continuation: typing.Tuple[T, ...]) -> typing.Generator[typing.Tuple[T, ...], None, None]:
+        return self._first_k_provider.first_k(rule_symbols, continuation)
     
-    def _expand_sequence(self, rule_symbols: typing.Iterable[BaseSymbol]) -> typing.Set[typing.Tuple[T, ...]]:
-        result: typing.Set[typing.Tuple[T, ...]] = set()
-        cur_result: typing.Set[typing.Tuple[T, ...]] = {()}
-        
-        k: typing.Final[int] = self._k
-        
-        # debug(">>>", "expand_sequence", rule_symbols)
-        
-        for child_symbol in rule_symbols:
-            cur_result = self._set_minkovsky_sum(
-                cur_result,
-                self._expand_symbol(child_symbol)
-            )
-            
-            long_results = set(r for r in cur_result if len(r) >= k)
-            
-            result.update(r[:k] for r in long_results)
-            cur_result.difference_update(long_results)
-        
-        result.update(r[:k] for r in cur_result)
-        
-        # debug(">>>", "expand_sequence result", result)
-        
-        return result
-    
-    def _expand_symbol(self, symbol: BaseSymbol) -> typing.Set[typing.Tuple[T, ...]]:
-        """
-        For each symbol, compute the set of all possible continuations of the symbol of length <=k.
-        """
-        
-        # debug(">>>", "expand_symbol", symbol)
-        
-        if symbol not in self._symbol_expansion_cache:
-            result: typing.Set[typing.Tuple[T, ...]] = set()
-            self._symbol_expansion_cache[symbol] = result
-            
-            while True:
-                old_len = len(result)
-                
-                result.update(self._do_expand_symbol(symbol))
-                
-                if len(result) == old_len:
-                    break
-        
-        # debug(">>>", "expand_symbol result", self._symbol_expansion_cache[symbol])
-        
-        return self._symbol_expansion_cache[symbol]
-    
-    def _do_expand_symbol(self, symbol: BaseSymbol) -> typing.Set[typing.Tuple[T, ...]]:
-        if symbol.is_terminal():
-            symbol: Terminal[T]
-            
-            return {(symbol.get_token(),)}
-        
-        result: typing.Set[typing.Tuple[T, ...]] = set()
-        
-        for rule in self._rules_by_lhs.get(symbol, ()):
-            result.update(self._expand_sequence(rule.rhs))
-        
-        return result
-    
-    @staticmethod
-    def _set_minkovsky_sum(set_a: typing.Set[T], set_b: typing.Set[T]) -> typing.Set[T]:
-        """
-        Compute the Minkovsky sum of the two sets.
-        """
-        
-        return set(a + b for a, b in itertools.product(set_a, set_b))
+    @property
+    def _rules_by_lhs(self) -> typing.Mapping[Nonterminal, typing.Collection[Rule[T]]]:
+        return self._first_k_provider.rules_by_lhs
     
     def build(self) -> typing.Tuple[FrozenTable[T], typing.Set[FrozenTable[T]]]:
-        start_table: Table[T] = Table.initial(only(self._rules_by_lhs[self._grammar.new_start]))
+        start_table: Table[T] = Table.initial(self._first_k_provider.new_start_rule)
         root: FrozenTable[T] = self._add_table(start_table)
         
         while self._tables.has_new():
@@ -232,6 +264,10 @@ class VGkBuilder(typing.Generic[T]):
         # debug(">", root)
         
         return root, set(self._tables)
+    
+    @property
+    def first_k_provider(self) -> FirstKProvider[T]:
+        return self._first_k_provider
 
 
 # TODO: Constructors and error info...?
@@ -271,7 +307,7 @@ class LRTablesBuilder(typing.Generic[T]):
         actions: typing.Dict[typing.Tuple[T, ...], Action[T]] = lr_state.actions
         assert not actions, "Transitions already built"
         
-        start_nonterm: Nonterminal[T] = self._vgk_builder._grammar.new_start
+        first_k_provider = self._vgk_builder.first_k_provider
         
         for state in vgk.values:
             # Shift
@@ -281,7 +317,7 @@ class LRTablesBuilder(typing.Generic[T]):
                 if not next_item.is_terminal():
                     continue
                 
-                valid_continuations = self._vgk_builder.first_k(
+                valid_continuations = first_k_provider.first_k(
                     state.rule.rhs[state.rule_pos:], state.continuation
                 )
                 
@@ -294,7 +330,7 @@ class LRTablesBuilder(typing.Generic[T]):
                 continue
             
             # Accept
-            if state.rule.lhs == start_nonterm and not state.continuation:
+            if state.rule.lhs == first_k_provider.new_start and not state.continuation:
                 assert state.continuation not in actions, "Accept conflicts should be impossible"
                 
                 actions[state.continuation] = Action.accept()
