@@ -45,6 +45,30 @@ class LR1ParserTest(ParserTestBase[LRParserAPI[StrTerminal]]):
         #         "":   False,
         #     }
         # ),
+        
+        # Proper indirect recursion test (should work with both LR(1) and LR(2))
+        ParserTestInfo(
+            "indirect_recursion",
+            """
+            <start> ::= <A> "!";
+            <A> ::= "a" <B> | "";
+            <B> ::= "b" <A> | "";
+            """,
+            {
+                "!":       True,
+                "a!":      True,
+                "ab!":      True,
+                "ababa!":  True,
+                "ababab!": True,
+                "":        False,
+                "ab":      False,
+                "aba":     False,
+                "bab!":    False,
+                "baba!":   False,
+                "abba!":   False,
+                "ababaa!": False,
+            }
+        ),
     ]
     
     @classmethod
@@ -88,7 +112,7 @@ class LR2ParserTest(LR1ParserTest):
 
 
 class FirstKTest(unittest.TestCase):
-    K: typing.Final[int] = 2
+    K: typing.ClassVar[int] = 2
     GRAMMAR_DEF: typing.ClassVar[str] = """ <start> ::= <start> "a" <start> "b"; <start> ::= ''; """
     
     grammar: typing.ClassVar[Grammar]
@@ -132,6 +156,20 @@ class FirstKTest(unittest.TestCase):
         self.check_first_k([Nonterminal("start")], "", {"", "aa", "ab"})
         self.check_first_k([Nonterminal("start")], "a", {"a", "aa", "ab"})
         self.check_first_k([Nonterminal("start"), StrTerminal("b"), Nonterminal("start")], "", {"b", "aa", "ab", "ba"})
+
+
+# Could properly separate FirstKTest from the abstract base, but won't bother
+class ExtraFirstKTest1(FirstKTest):
+    K: typing.Final[int] = 2
+    GRAMMAR_DEF: typing.ClassVar[str] = """
+        <start> ::= <A> "!";
+        <A> ::= "a" <B> | "";
+        <B> ::= "b" <A> | "";
+    """
+    
+    def test_first_k(self) -> None:
+        self.check_first_k([], "", {""})
+        self.check_first_k([Nonterminal("A")], "", {"", "a", "ab"})
 
 
 del ParserTestBase  # Otherwise it will be run as a test case
