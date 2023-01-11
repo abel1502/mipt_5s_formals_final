@@ -86,27 +86,27 @@ class LRParser(Parser[bool, T], typing.Generic[T]):
             
             preview: typing.Tuple[T, ...] = self._lookahead()
             
-            if preview not in cur_state.transitions:
+            if preview not in cur_state.actions:
                 return False
             
-            transition: Transition[T] = cur_state.transitions[preview]
+            action: Action[T] = cur_state.actions[preview]
             
-            if isinstance(transition, Transition.accept):
+            if isinstance(action, Action.accept):
                 return True
             
-            if isinstance(transition, Transition.shift):
+            if isinstance(action, Action.shift):
                 ch = self._source.next()
-                stack.append((ch, cur_state.actions[ch].target))
+                stack.append((ch, cur_state.transitions[ch].target))
                 continue
             
-            assert isinstance(transition, Transition.reduce)
-            rule: Rule[T] = transition.value
+            assert isinstance(action, Action.reduce)
+            rule: Rule[T] = action.value
             
             for i in range(len(rule)):
                 stack.pop()
             
             old_state: LRState[T] = self._cur_state
-            stack.append((rule.lhs, old_state.actions[rule.lhs].target))
+            stack.append((rule.lhs, old_state.transitions[rule.lhs].target))
         
         assert False, "Shouldn't be reachable"
 

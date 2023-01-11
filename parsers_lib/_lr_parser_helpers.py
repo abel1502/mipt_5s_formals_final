@@ -242,21 +242,21 @@ class LRConflict(ParseError):
 
 # This is probably overkill, but I at least like the way it has turned out.
 @tagged_union
-class Transition(typing.Generic[T]):
+class Action(typing.Generic[T]):
     shift: Unit
     reduce: Rule[T]
     accept: Unit
 
 
 @dataclasses.dataclass(frozen=True)
-class Action(typing.Generic[T]):
+class Transition(typing.Generic[T]):
     target: LRState[T]
 
 
 @dataclasses.dataclass()
 class LRState(typing.Generic[T]):
-    transitions: typing.Dict[typing.Tuple[T, ...], Transition[T]] = dataclasses.field(default_factory=dict)
-    actions: typing.Dict[BaseSymbol | T, Action[T]] = dataclasses.field(default_factory=dict)
+    actions: typing.Dict[typing.Tuple[T, ...], Action[T]] = dataclasses.field(default_factory=dict)
+    transitions: typing.Dict[BaseSymbol | T, Transition[T]] = dataclasses.field(default_factory=dict)
 
 
 class LRTablesBuilder(typing.Generic[T]):
@@ -267,9 +267,9 @@ class LRTablesBuilder(typing.Generic[T]):
         self._vgk_builder = VGkBuilder(grammar, k)
         self._states = {}
     
-    def _build_transitions(self, lr_state: LRState[T], vgk: FrozenTable[T]) -> None:
-        transitions: typing.Dict[typing.Tuple[T, ...], Transition[T]] = lr_state.transitions
-        assert not transitions, "Transitions already built"
+    def _build_actions(self, lr_state: LRState[T], vgk: FrozenTable[T]) -> None:
+        actions: typing.Dict[typing.Tuple[T, ...], Action[T]] = lr_state.actions
+        assert not actions, "Transitions already built"
         
         start_nonterm: Nonterminal[T] = self._vgk_builder._grammar.new_start
         
@@ -286,28 +286,28 @@ class LRTablesBuilder(typing.Generic[T]):
                 )
                 
                 for continuation in valid_continuations:
-                    if continuation in transitions and not isinstance(transitions[continuation], Transition.shift):
+                    if continuation in actions and not isinstance(actions[continuation], Action.shift):
                         raise LRConflict("Shift-reduce conflict")
                     
-                    transitions[continuation] = Transition.shift()
+                    actions[continuation] = Action.shift()
 
                 continue
             
             # Accept
             if state.rule.lhs == start_nonterm and not state.continuation:
-                assert state.continuation not in transitions, "Accept conflicts should be impossible"
+                assert state.continuation not in actions, "Accept conflicts should be impossible"
                 
-                transitions[state.continuation] = Transition.accept()
+                actions[state.continuation] = Action.accept()
 
                 continue
             
             # Reduce
-            if state.continuation in transitions:
+            if state.continuation in actions:
                 raise LRConflict("{}-reduce conflict".format(
-                    "Shift" if isinstance(transitions[state.continuation], Transition.shift) else "Reduce"
+                    "Shift" if isinstance(actions[state.continuation], Action.shift) else "Reduce"
                 ))
             
-            transitions[state.continuation] = Transition.reduce(state.rule)
+            actions[state.continuation] = Action.reduce(state.rule)
     
     def _state_for(self, vgk: FrozenTable[T]) -> LRState[T]:
         """
@@ -317,7 +317,7 @@ class LRTablesBuilder(typing.Generic[T]):
         if vgk not in self._states:
             lr_state = LRState()
             
-            self._build_transitions(lr_state, vgk)
+            self._build_actions(lr_state, vgk)
             
             self._states[vgk] = lr_state
         
@@ -327,13 +327,13 @@ class LRTablesBuilder(typing.Generic[T]):
         lr_state = self._state_for(vgk)
         
         for symbol, next_vgk in vgk.gotos.items():
-            action = Action(self._process(next_vgk))
+            transition = Transition(self._process(next_vgk))
             
-            lr_state.actions[symbol] = action
+            lr_state.transitions[symbol] = transition
             
             if symbol.is_terminal():
                 # A bit hacky, but whatever...
-                lr_state.actions[symbol.get_token()] = action
+                lr_state.transitions[symbol.get_token()] = transition
         
         return lr_state
     
@@ -346,8 +346,8 @@ __all__ = [
     # "Table",
     # "FrozenTable",
     # "VGkBuilder",
-    "Transition",
     "Action",
+    "Transition",
     "LRState",
     "LRTablesBuilder",
 ]
