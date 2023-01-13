@@ -70,12 +70,12 @@ class ParserTestBase(unittest.TestCase, typing.Generic[P]):
             "cringe",
             """ <start> ::= <a> <start> <a> "abc" | ""; <a> ::= ""; <b> ::= ""; """,
             {
-                # "":          True,
+                "":          True,
                 "abc":       True,
-                # "abcabcabc": True,
-                # "abcab":     False,
-                # "abb":       False,
-                # "bbc":       False,
+                "abcabcabc": True,
+                "abcab":     False,
+                "abb":       False,
+                "bbc":       False,
             }
         ),
     ]
