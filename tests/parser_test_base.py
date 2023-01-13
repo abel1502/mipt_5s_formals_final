@@ -65,6 +65,19 @@ class ParserTestBase(unittest.TestCase, typing.Generic[P]):
                 "":    False,
             }
         ),
+        
+        ParserTestInfo(
+            "cringe",
+            """ <start> ::= <a> <start> <a> "abc" | ""; <a> ::= ""; <b> ::= ""; """,
+            {
+                # "":          True,
+                "abc":       True,
+                # "abcabcabc": True,
+                # "abcab":     False,
+                # "abb":       False,
+                # "bbc":       False,
+            }
+        ),
     ]
     
     @classmethod

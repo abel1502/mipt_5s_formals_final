@@ -74,8 +74,15 @@ class UpdateableSet(typing.Generic[T]):
         
         return state
     
+    def refresh_all(self) -> None:
+        self.new_values.update(self.values)
+        self.values.clear()
+    
     def __iter__(self) -> typing.Iterator[T]:
         return itertools.chain(self.values, self.new_values)
+    
+    def __len__(self) -> int:
+        return len(self.values) + len(self.new_values)
 
 
 def debug(*args) -> None:

@@ -113,17 +113,28 @@ class EarleyParser(Parser[bool, T], typing.Generic[T]):
         self._tables.append(Table())
         
         table: typing.Final[Table[T]] = self._cur_table
-        while table.has_new():
-            state: State = table.process()
+        last_table_size: int
+        
+        # Turns out, a failsafe like this is necessary here(...
+        while True:
+            last_table_size = len(table)
             
-            next_item: BaseSymbol | None = state.get_next_item()
+            while table.has_new():
+                state: State = table.process()
+                
+                next_item: BaseSymbol | None = state.get_next_item()
+                
+                if next_item is None:
+                    self._complete(state)
+                elif next_item.is_terminal():
+                    self._scan(state, next_item, tok)
+                else:
+                    self._predict(next_item)
             
-            if next_item is None:
-                self._complete(state)
-            elif next_item.is_terminal():
-                self._scan(state, next_item, tok)
-            else:
-                self._predict(next_item)
+            if len(table) == last_table_size:
+                break
+            
+            table.refresh_all()
     
     def _scan(self, state: State, terminal: Terminal[T], tok: T | None) -> None:
         if tok is None:
